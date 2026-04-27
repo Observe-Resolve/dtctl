@@ -28,9 +28,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Weaver
-        uses: open-telemetry/setup-weaver@v0
-        with:
-          version: "0.17.0"
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            https://github.com/open-telemetry/weaver/releases/download/v0.21.2/weaver-installer.sh \
+            | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          weaver --version
 
       - name: Registry check (well-formed)
         run: weaver registry check -r weaver/registry
@@ -71,9 +74,9 @@ jobs:
 
       - name: Install dtctl
         run: |
-          curl -fsSL https://github.com/dynatrace-oss/dtctl/releases/latest/download/dtctl-linux-amd64 \
-            -o /usr/local/bin/dtctl
-          chmod +x /usr/local/bin/dtctl
+          curl -fsSL https://raw.githubusercontent.com/dynatrace-oss/dtctl/main/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          dtctl --version
 
       - name: Render manifests with synthetic version
         env:
@@ -128,6 +131,8 @@ jobs:
 
       - name: pytest
         working-directory: demo-app/services/checkout
+        env:
+          PYTHONPATH: .
         run: pytest tests/ -v
 
       - uses: docker/setup-buildx-action@v3
