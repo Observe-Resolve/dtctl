@@ -172,8 +172,12 @@ jobs:
           git config user.name  "observe-resolve-bot"
           git config user.email "bot@observe-resolve.dev"
           git add deploy/helm/values.yaml
-          git commit -m "release(${APP_VERSION}): bump checkout image tag"
-          git push
+          if git diff --staged --quiet; then
+            echo "No changes to values.yaml - already at ${APP_VERSION}"
+          else
+            git commit -m "release(${APP_VERSION}): bump checkout image tag"
+            git push
+          fi
 
       - name: Summary
         run: |
