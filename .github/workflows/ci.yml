@@ -86,8 +86,9 @@ jobs:
         run: |
           dtctl config set-context ci \
             --environment "$DT_ENVIRONMENT" \
-            --oauth-client-id "$DT_OAUTH_CLIENT_ID" \
-            --oauth-client-secret "$DT_OAUTH_CLIENT_SECRET"
+            --token-ref ci-token
+          dtctl config set-credentials ci-token \
+            --token "$DT_OAUTH_CLIENT_SECRET"
           dtctl config use-context ci
 
       - name: Render manifests with synthetic version
