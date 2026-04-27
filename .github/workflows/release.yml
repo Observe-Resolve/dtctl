@@ -91,8 +91,13 @@ jobs:
 
       - name: Install dtctl
         run: |
-          curl -fsSL https://github.com/dynatrace-oss/dtctl/releases/latest/download/dtctl-linux-amd64 \
-            -o /usr/local/bin/dtctl && chmod +x /usr/local/bin/dtctl
+          DTCTL_VERSION=$(curl -s https://api.github.com/repos/dynatrace-oss/dtctl/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          curl -fsSL "https://github.com/dynatrace-oss/dtctl/releases/latest/download/dtctl_${DTCTL_VERSION}_linux_amd64.tar.gz" \
+            -o dtctl.tar.gz
+          tar -xzf dtctl.tar.gz dtctl
+          sudo mv dtctl /usr/local/bin/dtctl
+          sudo chmod +x /usr/local/bin/dtctl
+          dtctl version
 
       - name: dtctl auth
         env:
@@ -105,6 +110,12 @@ jobs:
                            --env "$DT_ENVIRONMENT"
           dtctl auth verify
 
+      - name: Upload lookup tables (baseline metrics)
+        run: |
+          # Lookup tables must be uploaded before workflows that reference them
+          dtctl create lookup -f dtctl/lookups/service-baselines.yaml --plain || \
+            echo "Lookup table already exists or upload failed (non-fatal)"
+
       - name: Render + apply dashboards / SLOs / workflows / Guardian
         env:
           APP_VERSION: ${{ env.APP_VERSION }}
@@ -112,6 +123,40 @@ jobs:
           ./scripts/stamp-version.sh | tee /tmp/rendered.yaml >/dev/null
           dtctl diff -f /tmp/rendered.yaml || true
           dtctl apply -f /tmp/rendered.yaml
+
+      - name: Trigger Guardian validation (send SDLC event)
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+          DT_ENVIRONMENT: ${{ secrets.DT_ENVIRONMENT }}
+          OAUTH_CLIENT_ID: ${{ secrets.DT_OAUTH_CLIENT_ID }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.DT_OAUTH_CLIENT_SECRET }}
+        run: |
+          # Send SDLC deployment event to trigger guardian evaluation
+          # Get OAuth token
+          TOKEN=$(curl -s -X POST "https://${DT_ENVIRONMENT}/sso/oauth2/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials" \
+            -d "client_id=${OAUTH_CLIENT_ID}" \
+            -d "client_secret=${OAUTH_CLIENT_SECRET}" \
+            -d "scope=storage:events:write" \
+            | jq -r '.access_token')
+
+          # Send SDLC event
+          curl -X POST "https://${DT_ENVIRONMENT}/api/v2/events/ingest" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "eventType": "CUSTOM_DEPLOYMENT",
+              "title": "Checkout '"${APP_VERSION}"' deployment",
+              "entitySelector": "type(SERVICE),entityName.equals(\"checkout\")",
+              "properties": {
+                "dt.event.deployment": "true",
+                "dt.event.deployment.name": "checkout",
+                "dt.event.deployment.version": "'"${APP_VERSION}"'",
+                "dt.event.deployment.release_stage": "production",
+                "guardian.name": "checkout-release-'"${APP_VERSION}"'"
+              }
+            }' || echo "Warning: SDLC event send failed (non-fatal)"
 
   ##############################################################################
   # 3. Bump deploy/helm/values.yaml — Argo CD reconciles from here
