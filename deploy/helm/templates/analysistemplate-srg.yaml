@@ -20,7 +20,6 @@ spec:
 
       successCondition: "result == \"pass\""
       failureCondition: "result == \"fail\""
-      inconclusiveCondition: "result == \"warn\""
 
       provider:
         job:

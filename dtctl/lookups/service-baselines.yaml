@@ -1,0 +1,23 @@
+# Lookup table manifest for service baseline metrics.
+# Contains historical baseline performance data for comparison during incidents.
+#
+# To apply: dtctl create lookup -f dtctl/lookups/service-baselines.yaml
+#
+# The CSV file contains:
+# - service: Service name (lookup key)
+# - baseline_p95_ms: Historical p95 latency in milliseconds
+# - baseline_error_rate_pct: Historical error rate percentage
+# - baseline_req_per_hour: Historical request rate per hour
+# - captured_at: Date when baseline was captured
+# - source: Source of the baseline data
+type: lookup
+path: /lookups/grail/pm/service_baselines
+displayName: "Service Performance Baselines"
+description: |
+  Historical baseline performance metrics for otel-demo services.
+  Used by incident workflows to compare current performance against
+  known-good baselines captured on 2026-04-21 during discovery phase.
+lookupField: service
+dataFile: service-baselines.csv
+locale: en_US
+timezone: UTC
