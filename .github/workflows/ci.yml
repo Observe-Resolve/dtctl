@@ -1,5 +1,5 @@
 # PR gate — validates that the proposed change doesn't break the contract.
-# Runs on every pull request and on pushes to main.
+# Runs on every pull request and on pushes to master.
 #
 #   1. weaver       — registry well-formed + no breaking changes vs main baseline
 #   2. dtctl        — manifests parse with a synthetic APP_VERSION
@@ -76,11 +76,11 @@ jobs:
         run: |
           curl -fsSL https://raw.githubusercontent.com/dynatrace-oss/dtctl/main/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-          dtctl --version
+          dtctl version
 
       - name: Render manifests with synthetic version
         env:
-          APP_VERSION: v0.0.0-pr-${{ github.event.number }}
+          APP_VERSION: v0.0.0-pr-${{ github.event.number || github.run_id }}
         run: ./scripts/stamp-version.sh > /tmp/rendered.yaml
 
       - name: Validate
@@ -105,8 +105,8 @@ jobs:
       - name: helm template (synthetic tag)
         run: |
           helm template otel-demo deploy/helm \
-              --set image.tag=v0.0.0-pr-${{ github.event.number }} \
-              --set appVersion=v0.0.0-pr-${{ github.event.number }} \
+              --set image.tag=v0.0.0-pr-${{ github.event.number || github.run_id }} \
+              --set appVersion=v0.0.0-pr-${{ github.event.number || github.run_id }} \
               > /tmp/rendered.yaml
           test -s /tmp/rendered.yaml
           echo "rendered $(wc -l < /tmp/rendered.yaml) lines"
@@ -137,14 +137,17 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Lowercase image owner
+        run: echo "OWNER_LC=${OWNER,,}" >> $GITHUB_ENV
+
       - name: Docker build (no push) — catches Dockerfile breakage on PRs
         uses: docker/build-push-action@v6
         with:
           context: demo-app/services/checkout
           file: demo-app/services/checkout/Dockerfile
           push: false
-          tags: ghcr.io/${{ github.repository_owner }}/checkout:pr-${{ github.event.number }}
+          tags: ghcr.io/${{ env.OWNER_LC }}/checkout:pr-${{ github.event.number || github.run_id }}
           build-args: |
-            APP_VERSION=v0.0.0-pr-${{ github.event.number }}
+            APP_VERSION=v0.0.0-pr-${{ github.event.number || github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

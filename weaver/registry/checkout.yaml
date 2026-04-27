@@ -3,13 +3,15 @@
 # Breaking changes caught by `weaver registry diff` against baselines/main.
 
 groups:
+  # ── Attribute definitions ────────────────────────────────────────────────
   - id: checkout
-    type: span
+    type: attribute_group
     prefix: checkout
     brief: "Attributes emitted by the checkout service."
     attributes:
       - id: customer.tier
         type:
+          allow_custom_values: false
           members:
             - id: free
               value: "free"
@@ -24,6 +26,7 @@ groups:
 
       - id: payment.method
         type:
+          allow_custom_values: false
           members:
             - id: credit_card
               value: "credit_card"
@@ -41,7 +44,7 @@ groups:
         requirement_level: recommended
         stability: experimental
         brief: "Number of distinct line items in the cart at checkout."
-        examples: [3]
+        examples: [1, 5]
 
       - id: order.total_usd
         type: double
@@ -50,13 +53,14 @@ groups:
         brief: "Order total in USD (pre-tax)."
         examples: [129.99]
 
+  # ── Span definitions ─────────────────────────────────────────────────────
   - id: checkout.place_order
     type: span
     span_kind: server
     prefix: checkout
     brief: "Span emitted when the checkout service places an order."
     attributes:
-      - ref: customer.tier
-      - ref: payment.method
-      - ref: cart.size
-      - ref: order.total_usd
+      - ref: checkout.customer.tier
+      - ref: checkout.payment.method
+      - ref: checkout.cart.size
+      - ref: checkout.order.total_usd
