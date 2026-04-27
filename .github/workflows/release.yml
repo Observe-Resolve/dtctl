@@ -155,6 +155,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: master
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Rewrite deploy/helm/values.yaml (image.tag + appVersion)
