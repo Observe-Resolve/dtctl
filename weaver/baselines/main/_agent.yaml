@@ -8,7 +8,6 @@ groups:
   # ── Attribute definitions ────────────────────────────────────────────────
   - id: agent
     type: attribute_group
-    prefix: agent
     brief: "Attributes emitted by Claude Code when running via run-instrumented.sh."
     attributes:
       - id: repo
@@ -94,14 +93,19 @@ groups:
           members:
             - id: proposed_diff
               value: "proposed_diff"
+              stability: stable
             - id: committed
               value: "committed"
+              stability: stable
             - id: no_change
               value: "no_change"
+              stability: stable
             - id: error
               value: "error"
+              stability: stable
             - id: human_review_required
               value: "human_review_required"
+              stability: stable
         requirement_level: required
         stability: stable
         brief: "Terminal outcome of the run."
@@ -110,7 +114,7 @@ groups:
   - id: agent.repair_drift_ticket
     type: span
     span_kind: internal
-    prefix: agent
+    stability: stable
     brief: "Root span emitted when Claude resolves an observability-drift ticket."
     attributes:
       - ref: agent.repo
