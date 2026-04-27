@@ -17,7 +17,11 @@ name: Observability drift watcher
 
 on:
   push:
-    branches-ignore: [main]
+    # Ignore both common default-branch names so the watcher only fires on
+    # feature branches regardless of repo convention.
+    branches-ignore:
+      - main
+      - master
 
 permissions:
   contents: read
@@ -34,28 +38,50 @@ jobs:
 
       - name: Detect telemetry-touching changes
         id: scan
+        env:
+          # Resolves to whatever the repo's default branch is — main, master,
+          # trunk, anything. No hardcoding "main".
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          # Compute diff against main. Emit the list of probably-telemetry-related changes.
-          git fetch origin main
-          CHANGED=$(git diff --name-only origin/main..HEAD)
+          set -e
+          echo "base branch (repo default): $BASE_BRANCH"
+
+          # Bail out gracefully if the base branch doesn't exist on origin yet —
+          # this happens on the very first push to a brand-new repo, before
+          # main/master has any commits. Nothing to diff against.
+          if ! git fetch origin "$BASE_BRANCH" 2>/dev/null; then
+            echo "::warning title=Drift watcher::Base branch '$BASE_BRANCH' not found on origin (first push?) — skipping drift analysis."
+            echo "code="     >> "$GITHUB_OUTPUT"
+            echo "registry=" >> "$GITHUB_OUTPUT"
+            echo "dtctl="    >> "$GITHUB_OUTPUT"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Compute diff against the default branch.
+          CHANGED=$(git diff --name-only "origin/$BASE_BRANCH..HEAD" || true)
           echo "$CHANGED" > /tmp/changed.txt
+          echo "changed files:"; cat /tmp/changed.txt | sed 's/^/  /'
 
           TOUCHED_CODE=$(grep -E '(checkout|payment|cart|frontend|shipping|recommendation)/.*\.(py|ts|js|go|java)$' /tmp/changed.txt || true)
           TOUCHED_REGISTRY=$(grep -E '^weaver/registry/' /tmp/changed.txt || true)
           TOUCHED_DTCTL=$(grep -E '^dtctl/' /tmp/changed.txt || true)
 
-          echo "code=$TOUCHED_CODE" >> "$GITHUB_OUTPUT"
+          echo "code=$TOUCHED_CODE"        >> "$GITHUB_OUTPUT"
           echo "registry=$TOUCHED_REGISTRY" >> "$GITHUB_OUTPUT"
-          echo "dtctl=$TOUCHED_DTCTL" >> "$GITHUB_OUTPUT"
+          echo "dtctl=$TOUCHED_DTCTL"      >> "$GITHUB_OUTPUT"
+          echo "skipped=false"             >> "$GITHUB_OUTPUT"
 
       - name: Analyze drift
         id: analyze
-        if: steps.scan.outputs.code != ''
+        if: steps.scan.outputs.skipped != 'true' && steps.scan.outputs.code != ''
+        env:
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          # Extract all span.set_attribute / counter / histogram references on HEAD and on main.
-          # If HEAD's set differs from main's set AND registry didn't change, that's drift.
+          # Compares set of telemetry attribute names between BASE_BRANCH and HEAD.
+          # If HEAD's set differs and registry didn't change, that's drift.
           python3 scripts/detect-drift.py \
-            --base-ref origin/main \
+            --base-ref "origin/$BASE_BRANCH" \
             --head-ref HEAD \
             --changed-files /tmp/changed.txt \
             --registry weaver/registry \

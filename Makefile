@@ -39,6 +39,13 @@ scenario-2:  ## RED: rename customer.tier → Weaver fails → repair suggestion
 scenario-3:  ## GUARDIAN: v1.1.2 regression → SRG fails → auto-rollback
 	./scripts/scenario-3-srg-gate.sh
 
+.PHONY: rollback
+rollback:  ## re-stamp dtctl manifests to TAG=vX.Y.Z (after Argo Rollouts aborts a canary)
+	@if [ -z "$(TAG)" ]; then echo "Usage: make rollback TAG=v1.1.1"; exit 1; fi
+	@echo "Re-stamping dtctl manifests to $(TAG) (dashboards/SLOs/Guardian will reflect what's actually serving traffic)"
+	APP_VERSION=$(TAG) ./scripts/stamp-version.sh | dtctl apply -f -
+	@echo "Done. Verify in Dynatrace that the dashboard's version badge reads $(TAG)."
+
 .PHONY: clean
 clean:  ## tear down cluster + Dynatrace resources
 	./demo-app/deploy.sh --destroy || true

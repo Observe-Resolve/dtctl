@@ -1,13 +1,21 @@
 # Release pipeline — runs on every semver tag push.
 #
-# Flow (pure GitOps from step 3 onward):
-#   1. build-checkout       — docker build + push ghcr.io/.../checkout:$TAG
-#   2. apply-dtctl          — render dtctl/*.yaml with APP_VERSION + apply (dashboards, SLOs, Guardian)
-#   3. promote-via-argo     — bump deploy/helm/values.yaml's image.tag and appVersion → git push
-#                             Argo CD reconciles → Argo Rollouts kicks off the canary
-#   4. watch-rollout        — tail kubectl-argo-rollouts; succeeds on Healthy, fails on Degraded
-#   5. on-failure           — Guardian aborted the canary → re-stamp dtctl to previous tag,
-#                             post evidence as a commit comment
+# Three jobs, dependency-chained:
+#   1. build-checkout   — docker build + push ghcr.io/.../checkout:$TAG
+#   2. apply-dtctl      — stamp + apply dashboards / SLOs / Guardian to Dynatrace
+#   3. promote-via-argo — bump deploy/helm/values.yaml's image.tag → git push
+#                         Argo CD reconciles → Argo Rollouts kicks off the canary
+#
+# CI ends here. From this point on the cluster owns the release:
+#   - Argo CD reconciles within seconds
+#   - Argo Rollouts walks the canary 10% → 50% → 100% with the SRG analysis between steps
+#   - Pass: canary promotes to 100%
+#   - Fail: AnalysisRun trips, Rollouts aborts the canary, traffic stays on the previous tag
+#
+# Watch the rollout in the Argo Rollouts UI. To roll back the dtctl manifests
+# after an aborted release, run `make rollback TAG=<previous-tag>` locally —
+# that re-stamps dashboards/SLOs/Guardian to whatever version is actually
+# serving traffic.
 name: Release
 
 on:
@@ -18,7 +26,6 @@ on:
 permissions:
   contents: write       # to push the values bump back to main
   packages: write       # to push the image to ghcr.io
-  pull-requests: write  # to comment on the release commit on failure
 
 env:
   APP_VERSION: ${{ github.ref_name }}
@@ -135,87 +142,22 @@ jobs:
           git commit -m "release(${APP_VERSION}): bump checkout image tag"
           git push
 
-  ##############################################################################
-  # 4. Watch the Argo Rollouts canary — succeeds on Healthy, fails on Degraded
-  ##############################################################################
-  watch-rollout:
-    name: Watch Argo Rollouts canary
-    needs: promote-via-argo
-    runs-on: ubuntu-latest
-    if: ${{ secrets.KUBECONFIG_BASE64 != '' }}
-    steps:
-      - name: Install kubectl + argo-rollouts plugin
+      - name: Summary
         run: |
-          curl -fsSL https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64 \
-            -o /usr/local/bin/kubectl-argo-rollouts && chmod +x /usr/local/bin/kubectl-argo-rollouts
-
-      - name: Load kubeconfig
-        run: |
-          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > /tmp/kubeconfig
-          echo "KUBECONFIG=/tmp/kubeconfig" >> $GITHUB_ENV
-
-      - name: Tail the Rollout
-        run: |
-          # Block until Healthy (canary promoted) or Degraded (Guardian aborted).
-          # Timeout protects us against a hung Rollout.
-          kubectl-argo-rollouts -n otel-demo get rollout checkout --watch --timeout 20m
-          STATUS=$(kubectl-argo-rollouts -n otel-demo get rollout checkout -o json | jq -r '.status.phase')
-          echo "rollout phase: $STATUS"
-          [[ "$STATUS" == "Healthy" ]] || exit 1
-
-  ##############################################################################
-  # 5. On Argo Rollouts failure — re-stamp dtctl to previous tag + post evidence
-  ##############################################################################
-  on-failure:
-    name: Re-stamp dtctl to previous tag
-    needs: watch-rollout
-    if: failure()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Resolve previous tag
-        id: prev
-        run: |
-          PREV=$(git tag --list --sort=-v:refname 'v*.*.*' | sed -n '2p')
-          echo "tag=$PREV" >> "$GITHUB_OUTPUT"
-
-      - name: Install dtctl + auth
-        env:
-          OAUTH_CLIENT_ID:     ${{ secrets.DT_OAUTH_CLIENT_ID }}
-          OAUTH_CLIENT_SECRET: ${{ secrets.DT_OAUTH_CLIENT_SECRET }}
-          DT_ENVIRONMENT:      ${{ secrets.DT_ENVIRONMENT }}
-        run: |
-          curl -fsSL https://github.com/dynatrace-oss/dtctl/releases/latest/download/dtctl-linux-amd64 \
-            -o /usr/local/bin/dtctl && chmod +x /usr/local/bin/dtctl
-          dtctl auth login --oauth-client-id "$OAUTH_CLIENT_ID" \
-                           --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
-                           --env "$DT_ENVIRONMENT"
-
-      - name: Re-stamp dashboards / SLOs with previous tag
-        env:
-          APP_VERSION: ${{ steps.prev.outputs.tag }}
-        run: ./scripts/stamp-version.sh | dtctl apply -f -
-
-      - name: Comment evidence on the release commit
-        uses: actions/github-script@v7
-        env:
-          PREV_TAG: ${{ steps.prev.outputs.tag }}
-        with:
-          script: |
-            const body = [
-              `### :rotating_light: Argo Rollouts aborted \`${process.env.APP_VERSION}\``,
-              ``,
-              `Site Reliability Guardian verdict = **fail** at a canary step.`,
-              `Traffic stayed on \`${process.env.PREV_TAG}\` — no full cutover happened.`,
-              `Dashboards + SLOs re-stamped to \`${process.env.PREV_TAG}\`.`,
-              ``,
-              `See the Rollouts UI for the AnalysisRun that tripped the gate:`,
-              `  \`kubectl-argo-rollouts -n otel-demo get rollout checkout\``
-            ].join('\n');
-            await github.rest.repos.createCommitComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              commit_sha: context.sha, body
-            });
+          {
+            echo "### :rocket: Released \`${APP_VERSION}\`"
+            echo ""
+            echo "- Image pushed: \`${IMAGE_REPO}:${APP_VERSION}\`"
+            echo "- dtctl manifests applied to Dynatrace"
+            echo "- \`deploy/helm/values.yaml\` bumped — Argo CD will reconcile"
+            echo ""
+            echo "Watch the Rollout in the Argo Rollouts UI:"
+            echo "\`\`\`"
+            echo "kubectl-argo-rollouts -n otel-demo get rollout checkout --watch"
+            echo "\`\`\`"
+            echo ""
+            echo "If the canary is aborted by the Site Reliability Guardian, roll dashboards back with:"
+            echo "\`\`\`"
+            echo "make rollback TAG=<previous-tag>"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
