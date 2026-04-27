@@ -1,45 +1,123 @@
+# OPTIONAL BONUS — semantic conventions for agent self-observation.
+#
+# Only relevant if you wrap your Claude Code runs with scripts/run-instrumented.sh.
+# The on-camera scenarios for Ep. 09 do not emit these attributes. You can delete
+# this file if you don't need the agent-activity dashboard.
+
 groups:
   # ── Attribute definitions ────────────────────────────────────────────────
-  - id: payment
+  - id: agent
     type: attribute_group
-    prefix: payment
-    brief: "Payment service span attributes."
+    prefix: agent
+    brief: "Attributes emitted by Claude Code when running via run-instrumented.sh."
     attributes:
-      - id: provider
+      - id: repo
         type: string
         requirement_level: required
         stability: stable
-        brief: "Which external processor handled the charge."
-        examples: ["stripe", "adyen"]
+        brief: "Repository slug the agent is operating on."
+        examples: ["observe-resolve-ep9-dtctl"]
 
-      - id: amount_usd
-        type: double
+      - id: model
+        type: string
+        requirement_level: recommended
+        stability: stable
+        brief: "Model identifier running the agent."
+        examples: ["claude-sonnet-4.6", "claude-opus-4.6"]
+
+      - id: session
+        type: string
         requirement_level: required
         stability: stable
-        brief: "Charge amount in USD."
-        examples: [129.99]
+        brief: "Stable identifier scoping all spans/logs from a single Claude run."
+        examples: ["sess-1777000000-42"]
 
+      - id: repo_sha
+        type: string
+        requirement_level: recommended
+        stability: experimental
+        brief: "Short SHA of the commit the agent is operating on."
+        examples: ["4a2e9b1"]
+
+  # ── Non-prefixed attribute definitions ───────────────────────────────────
+  - id: attr.ticket
+    type: attribute_group
+    brief: "Ticket-related attributes."
+    attributes:
+      - id: ticket.id
+        type: int
+        requirement_level: recommended
+        stability: stable
+        brief: "GitHub issue number if the run is resolving a ticket."
+        examples: [42]
+
+  - id: attr.skill
+    type: attribute_group
+    brief: "Skill-related attributes."
+    attributes:
+      - id: skill.names
+        type: string
+        requirement_level: required
+        stability: stable
+        brief: "Comma-separated list of skills active for this run."
+        examples: ["observability-repair,dtctl,agent-observability"]
+
+  - id: attr.tools
+    type: attribute_group
+    brief: "Tool invocation attributes."
+    attributes:
+      - id: tools.called
+        type: int
+        requirement_level: recommended
+        stability: stable
+        brief: "Count of tool invocations within the run."
+        examples: [12]
+
+  - id: attr.files
+    type: attribute_group
+    brief: "File change attributes."
+    attributes:
+      - id: files.changed
+        type: int
+        requirement_level: recommended
+        stability: stable
+        brief: "Count of files the agent wrote/modified."
+        examples: [3]
+
+  - id: attr.outcome
+    type: attribute_group
+    brief: "Outcome attributes."
+    attributes:
       - id: outcome
         type:
           allow_custom_values: false
           members:
-            - id: success
-              value: "success"
-            - id: declined
-              value: "declined"
+            - id: proposed_diff
+              value: "proposed_diff"
+            - id: committed
+              value: "committed"
+            - id: no_change
+              value: "no_change"
             - id: error
               value: "error"
+            - id: human_review_required
+              value: "human_review_required"
         requirement_level: required
         stability: stable
-        brief: "Terminal outcome of the charge."
+        brief: "Terminal outcome of the run."
 
   # ── Span definitions ─────────────────────────────────────────────────────
-  - id: payment.charge
+  - id: agent.repair_drift_ticket
     type: span
     span_kind: internal
-    prefix: payment
-    brief: "Span around the provider call."
+    prefix: agent
+    brief: "Root span emitted when Claude resolves an observability-drift ticket."
     attributes:
-      - ref: payment.provider
-      - ref: payment.amount_usd
-      - ref: payment.outcome
+      - ref: agent.repo
+      - ref: agent.model
+      - ref: agent.session
+      - ref: ticket.id
+      - ref: skill.names
+      - ref: tools.called
+      - ref: files.changed
+      - ref: outcome

@@ -84,7 +84,7 @@ jobs:
         run: ./scripts/stamp-version.sh > /tmp/rendered.yaml
 
       - name: Validate
-        run: dtctl validate -f /tmp/rendered.yaml
+        run: dtctl apply -f /tmp/rendered.yaml --dry-run
 
   ##############################################################################
   # 3. Helm chart — lint + render with a synthetic image tag
@@ -135,10 +135,10 @@ jobs:
           PYTHONPATH: .
         run: pytest tests/ -v
 
-      - uses: docker/setup-buildx-action@v3
-
       - name: Lowercase image owner
-        run: echo "OWNER_LC=${OWNER,,}" >> $GITHUB_ENV
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - uses: docker/setup-buildx-action@v3
 
       - name: Docker build (no push) — catches Dockerfile breakage on PRs
         uses: docker/build-push-action@v6
@@ -146,7 +146,7 @@ jobs:
           context: demo-app/services/checkout
           file: demo-app/services/checkout/Dockerfile
           push: false
-          tags: ghcr.io/${{ env.OWNER_LC }}/checkout:pr-${{ github.event.number || github.run_id }}
+          tags: ghcr.io/observe-resolve/checkout:pr-${{ github.event.number || github.run_id }}
           build-args: |
             APP_VERSION=v0.0.0-pr-${{ github.event.number || github.run_id }}
           cache-from: type=gha
