@@ -1,0 +1,52 @@
+# AnalysisTemplate — "Is the Site Reliability Guardian happy with this canary?"
+# Polls dtctl get guardian-run for the verdict; pass → promote, fail → abort.
+# Templated from values.yaml so the polling cadence is configurable per env.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ .Values.analysis.templateName }}
+  namespace: otel-demo
+  labels:
+    {{- include "checkout.labels" . | nindent 4 }}
+spec:
+  args:
+    - name: app-version
+    - name: canary-weight
+
+  metrics:
+    - name: srg-pass
+      interval: {{ .Values.analysis.pollIntervalSec }}s
+      count: {{ .Values.analysis.pollCount }}
+
+      successCondition: "result == \"pass\""
+      failureCondition: "result == \"fail\""
+      inconclusiveCondition: "result == \"warn\""
+
+      provider:
+        job:
+          spec:
+            backoffLimit: 1
+            template:
+              spec:
+                restartPolicy: Never
+                serviceAccountName: rollouts-srg-reader
+                containers:
+                  - name: dtctl
+                    image: ghcr.io/dynatrace-oss/dtctl:latest
+                    envFrom:
+                      - secretRef:
+                          name: dtctl-oauth
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        set -euo pipefail
+                        GUARDIAN="checkout-release-{{ "{{args.app-version}}" }}"
+                        dtctl auth login --oauth-client-id "$OAUTH_CLIENT_ID" \
+                                         --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
+                                         --env "$DT_ENVIRONMENT" >/dev/null
+
+                        dtctl get guardian-run \
+                              --guardian "$GUARDIAN" \
+                              --latest \
+                              --output=json \
+                          | jq -r '.verdict'

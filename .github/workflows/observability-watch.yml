@@ -1,0 +1,99 @@
+# Observability drift watcher — the "Copilot as observability reviewer" pipeline.
+#
+# Runs on every push to a non-main branch. Detects three drift patterns:
+#   1. A span/metric/log call in code was renamed/removed BUT weaver/registry/ wasn't updated.
+#   2. A new attribute appears in code BUT isn't declared in the registry.
+#   3. dtctl/*.yaml references an attribute that was just removed from code.
+#
+# When drift is detected, it files a GitHub Issue with label `observability-drift`
+# using the template at .github/ISSUE_TEMPLATE/observability-drift.md. The issue body
+# includes a Claude Code-ready prompt so the human reviewer can kick off the resolver
+# with one click.
+#
+# In an org with GitHub Copilot (Workspace / Agents) enabled, Copilot picks up the
+# label `needs-agent` automatically and proposes a PR. In this demo we show the
+# equivalent behavior via the Claude Code prompt in prompts/resolve-drift-ticket.md.
+name: Observability drift watcher
+
+on:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect telemetry-touching changes
+        id: scan
+        run: |
+          # Compute diff against main. Emit the list of probably-telemetry-related changes.
+          git fetch origin main
+          CHANGED=$(git diff --name-only origin/main..HEAD)
+          echo "$CHANGED" > /tmp/changed.txt
+
+          TOUCHED_CODE=$(grep -E '(checkout|payment|cart|frontend|shipping|recommendation)/.*\.(py|ts|js|go|java)$' /tmp/changed.txt || true)
+          TOUCHED_REGISTRY=$(grep -E '^weaver/registry/' /tmp/changed.txt || true)
+          TOUCHED_DTCTL=$(grep -E '^dtctl/' /tmp/changed.txt || true)
+
+          echo "code=$TOUCHED_CODE" >> "$GITHUB_OUTPUT"
+          echo "registry=$TOUCHED_REGISTRY" >> "$GITHUB_OUTPUT"
+          echo "dtctl=$TOUCHED_DTCTL" >> "$GITHUB_OUTPUT"
+
+      - name: Analyze drift
+        id: analyze
+        if: steps.scan.outputs.code != ''
+        run: |
+          # Extract all span.set_attribute / counter / histogram references on HEAD and on main.
+          # If HEAD's set differs from main's set AND registry didn't change, that's drift.
+          python3 scripts/detect-drift.py \
+            --base-ref origin/main \
+            --head-ref HEAD \
+            --changed-files /tmp/changed.txt \
+            --registry weaver/registry \
+            --output /tmp/drift.json
+
+          if [[ -s /tmp/drift.json ]] && [[ "$(jq '.drifts | length' /tmp/drift.json)" -gt 0 ]]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            cat /tmp/drift.json
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open observability drift issue
+        if: steps.analyze.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const drift = JSON.parse(fs.readFileSync('/tmp/drift.json', 'utf8'));
+            const tmpl = fs.readFileSync('.github/ISSUE_TEMPLATE/observability-drift.md', 'utf8');
+
+            const rows = drift.drifts.map(d =>
+              `| ${d.kind} | \`${d.attribute}\` | ${d.location} | ${d.suggestion} |`
+            ).join('\n');
+
+            const body = tmpl
+              .replace('{{BRANCH}}',  context.ref.replace('refs/heads/',''))
+              .replace('{{COMMIT}}',  context.sha.slice(0,7))
+              .replace('{{DRIFTS}}',  rows)
+              .replace('{{JSON}}',    JSON.stringify(drift, null, 2));
+
+            const title = `Observability drift on \`${context.ref.replace('refs/heads/','')}\` (${drift.drifts.length} issues)`;
+
+            const { data: issue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title,
+              body,
+              labels: ['observability-drift', 'needs-agent']
+            });
+            console.log(`Filed issue #${issue.number}`);

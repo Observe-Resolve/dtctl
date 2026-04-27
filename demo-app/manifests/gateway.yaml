@@ -1,0 +1,11 @@
+# DEPRECATED — kept as a stub only.
+#
+# An earlier draft layered Istio ambient mesh + kgateway on the cluster to drive
+# Argo Rollouts traffic-splitting via a Gateway API HTTPRoute. The episode's
+# focus is OpenTelemetry semantic-convention drift caught by Weaver, NOT the
+# service-mesh / ingress layer — so the mesh + gateway are out.
+#
+# Argo Rollouts now uses scaling-based canary (no trafficRouting); the
+# AnalysisRun + Guardian verdict mechanic is unchanged on camera.
+#
+# Safe to delete this file from your fork.

@@ -1,0 +1,38 @@
+# Checkout availability SLO — scoped to the release.
+apiVersion: platform.dynatrace.io/v1
+kind: SLO
+metadata:
+  name: checkout-availability
+  labels:
+    owner: observe-and-resolve
+    episode: "09"
+    release: ${APP_VERSION}
+    service: checkout
+spec:
+  description: "Successful checkout.place_order ratio over 7 days, scoped to release ${APP_VERSION}."
+  target: 99.0
+  warning: 99.5
+  evaluationWindow: "P7D"
+  sli:
+    type: ratio
+    good: |
+      fetch spans, from:now()-7d
+      | filter service.name == "checkout"
+      | filter span.name == "checkout.place_order"
+      | filter app.version == "${APP_VERSION}"
+      | filter status != "ERROR"
+      | summarize count()
+    total: |
+      fetch spans, from:now()-7d
+      | filter service.name == "checkout"
+      | filter span.name == "checkout.place_order"
+      | filter app.version == "${APP_VERSION}"
+      | summarize count()
+  errorBudget:
+    burnRateAlerts:
+      - severity: page
+        burnRate: 14.4
+        window: "PT1H"
+      - severity: ticket
+        burnRate: 6
+        window: "PT6H"

@@ -1,0 +1,49 @@
+# Argo CD Application — watches deploy/helm/values.yaml and keeps the cluster
+# in sync with it. GitHub Actions release.yml updates the tag in values.yaml
+# and pushes; Argo CD reconciles the rollout.
+#
+# Placeholders sed-substituted by demo-app/deploy.sh:
+#   observeresolve-ep9-demo ← --clustername
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-demo-light
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    owner: observe-and-resolve
+    episode: "09"
+    cluster: CLUSTER_NAME_TO_REPLACE
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Observe-Resolve/dtctl
+    targetRevision: main
+    path: deploy/helm
+    helm:
+      releaseName: otel-demo
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: otel-demo
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+
+  revisionHistoryLimit: 10

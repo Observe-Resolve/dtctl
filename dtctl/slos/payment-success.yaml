@@ -1,0 +1,35 @@
+# Payment success rate SLO — scoped to the release.
+apiVersion: platform.dynatrace.io/v1
+kind: SLO
+metadata:
+  name: payment-success
+  labels:
+    owner: observe-and-resolve
+    episode: "09"
+    release: ${APP_VERSION}
+    service: payment
+spec:
+  description: "Payment service success rate over 7 days for release ${APP_VERSION}."
+  target: 99.9
+  warning: 99.95
+  evaluationWindow: "P7D"
+  sli:
+    type: ratio
+    good: |
+      fetch spans, from:now()-7d
+      | filter service.name == "payment"
+      | filter span.name == "payment.charge"
+      | filter app.version == "${APP_VERSION}"
+      | filter payment.outcome == "success"
+      | summarize count()
+    total: |
+      fetch spans, from:now()-7d
+      | filter service.name == "payment"
+      | filter span.name == "payment.charge"
+      | filter app.version == "${APP_VERSION}"
+      | summarize count()
+  errorBudget:
+    burnRateAlerts:
+      - severity: page
+        burnRate: 14.4
+        window: "PT1H"

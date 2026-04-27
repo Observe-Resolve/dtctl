@@ -1,0 +1,116 @@
+# Service health dashboard for the otel-demo namespace.
+# ${APP_VERSION} is substituted by scripts/stamp-version.sh before `dtctl apply`.
+apiVersion: platform.dynatrace.io/v1
+kind: Dashboard
+metadata:
+  name: otel-demo-service-health
+  labels:
+    owner: observe-and-resolve
+    episode: "09"
+    release: ${APP_VERSION}
+    generator: dtctl
+spec:
+  title: "otel-demo · Service Health · ${APP_VERSION}"
+  description: |
+    Versioned dashboard for the otel-demo app at release ${APP_VERSION}.
+    Every tile filters on `app.version == "${APP_VERSION}"` so you only ever
+    see telemetry from the release this dashboard was applied for.
+  variables:
+    - key: app_version
+      type: constant
+      value: "${APP_VERSION}"
+    - key: customer_tier
+      type: csv
+      values: ["all", "free", "plus", "enterprise"]
+      defaultValue: "all"
+  layout:
+    columns: 12
+    rowHeight: 60
+  tiles:
+    - position: { x: 0, y: 0, w: 12, h: 3 }
+      type: markdown
+      content: |
+        ### otel-demo · service health — **${APP_VERSION}**
+        Scoped to `app.version == "${APP_VERSION}"`. Filter by customer tier above.
+
+    - position: { x: 0, y: 3, w: 3, h: 4 }
+      type: single-value
+      title: "Release version"
+      query: |
+        fetch spans, from:now()-5m
+        | filter k8s.namespace.name == "otel-demo"
+        | filter app.version == "${APP_VERSION}"
+        | summarize count()
+        | fieldsAdd label = "${APP_VERSION}"
+      display: label
+
+    - position: { x: 3, y: 3, w: 9, h: 4 }
+      type: services-topology
+      title: "Service map (filtered on release)"
+      query: |
+        fetch dt.entity.service
+        | filter matchesValue(tags, "namespace:otel-demo")
+        | fields entity.name, dependencies
+
+    - position: { x: 0, y: 7, w: 6, h: 6 }
+      type: line-chart
+      title: "Request rate per service"
+      query: |
+        fetch spans, from:now()-1h
+        | filter span.kind == "server"
+        | filter k8s.namespace.name == "otel-demo"
+        | filter app.version == "${APP_VERSION}"
+        | summarize req = count(), by: {service.name, bin(timestamp, 1m)}
+        | sort timestamp asc
+
+    - position: { x: 6, y: 7, w: 6, h: 6 }
+      type: bar-chart
+      title: "p95 latency per service"
+      query: |
+        fetch spans, from:now()-30m
+        | filter span.kind == "server"
+        | filter app.version == "${APP_VERSION}"
+        | summarize p95 = percentile(duration, 95), by: {service.name}
+        | sort p95 desc
+
+    - position: { x: 0, y: 13, w: 6, h: 5 }
+      type: histogram
+      title: "Cart size distribution (checkout.cart.size)"
+      query: |
+        fetch spans, from:now()-1h
+        | filter service.name == "checkout"
+        | filter span.name == "checkout.place_order"
+        | filter app.version == "${APP_VERSION}"
+        | filter isNotNull(checkout.cart.size)
+        | summarize dist = histogram(checkout.cart.size), buckets: 10
+
+    - position: { x: 6, y: 13, w: 6, h: 5 }
+      type: single-value
+      title: "Checkout error rate (5m)"
+      query: |
+        fetch spans, from:now()-5m
+        | filter service.name == "checkout"
+        | filter app.version == "${APP_VERSION}"
+        | summarize err = countIf(status == "ERROR") * 100.0 / count()
+      thresholds:
+        - color: green
+          value: 0
+        - color: yellow
+          value: 1
+        - color: red
+          value: 3
+      unit: "%"
+
+    - position: { x: 0, y: 18, w: 12, h: 6 }
+      type: table
+      title: "Checkout errors by customer tier + payment method"
+      query: |
+        fetch spans, from:now()-1h
+        | filter service.name == "checkout" and status == "ERROR"
+        | filter app.version == "${APP_VERSION}"
+        | filter $customer_tier == "all" or customer.tier == $customer_tier
+        | summarize errors = count(),
+                    avg_duration_ms = avg(duration) / 1000000,
+                    by: {customer.tier, payment.method, exception.type}
+        | sort errors desc
+        | limit 20

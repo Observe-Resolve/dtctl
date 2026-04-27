@@ -1,0 +1,46 @@
+# Values watched by Argo CD.
+#
+# THE TAG BUMP HAPPENS HERE.
+#
+# .github/workflows/release.yml rewrites `image.tag` and `appVersion` on every
+# git tag push. Argo CD detects the change, re-renders the chart, and Argo
+# Rollouts picks up the new image — kicking off the canary.
+#
+# Don't edit `image.tag` by hand on main; let CI do it so the value matches
+# what was pushed to ghcr.io.
+
+image:
+  repository: ghcr.io/henrikrexed/checkout
+  tag: v1.0.0
+  pullPolicy: IfNotPresent
+
+# Mirrored into pod env as APP_VERSION + into resource attributes via the
+# OTel Operator's Instrumentation CR. Keep in sync with image.tag.
+appVersion: v1.0.0
+
+# Replica count for the Rollout's stable pool.
+# Canary scales proportionally to setWeight (see templates/rollout.yaml).
+replicas: 3
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits:   { cpu: 500m, memory: 256Mi }
+
+# SRG AnalysisTemplate — these are the names the Rollout's analysis steps
+# reference. Don't rename without updating templates/rollout.yaml.
+analysis:
+  templateName: srg-verdict
+  pollIntervalSec: 30
+  pollCount: 24        # 30s × 24 = 12-minute ceiling per analysis step
+
+# Canary strategy. Edit cautiously — the on-camera scenarios assume two
+# analysis gates (10 % then 50 %) before full cutover.
+canary:
+  steps:
+    - setWeight: 10
+    - pauseSec: 120
+    - analysisAt: 10
+    - setWeight: 50
+    - pauseSec: 120
+    - analysisAt: 50
+    - setWeight: 100

@@ -1,0 +1,8 @@
+# SUPERSEDED — see deploy/helm/templates/rollout.yaml
+#
+# The Rollout is now templated from the Helm chart at deploy/helm/, so Argo CD
+# re-renders it whenever values.yaml changes (e.g. the image tag bump CI does
+# on every git tag). Don't apply this raw file directly — Argo CD owns the
+# Rollout via the chart now.
+#
+# Safe to delete this file from your fork.

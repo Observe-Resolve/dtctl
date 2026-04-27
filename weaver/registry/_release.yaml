@@ -1,0 +1,29 @@
+# Release metadata emitted on every span by every service.
+# Stamped into telemetry via OTEL_RESOURCE_ATTRIBUTES by the release.yml workflow.
+
+groups:
+  - id: release
+    type: resource
+    prefix: app
+    brief: "Release identity attached to every span, metric, and log."
+    attributes:
+      - id: app.version
+        type: string
+        requirement_level: required
+        stability: stable
+        brief: "Git tag of the release, e.g. v1.1.0."
+        examples: ["v1.1.0", "v1.1.2"]
+
+      - id: app.commit_sha
+        type: string
+        requirement_level: recommended
+        stability: stable
+        brief: "Commit SHA of the release."
+        examples: ["4a2e9b1"]
+
+      - id: app.build_pipeline
+        type: string
+        requirement_level: recommended
+        stability: stable
+        brief: "CI pipeline that produced the release."
+        examples: ["github-actions://observe-resolve-ep9-dtctl/release.yml@v1.1.0"]

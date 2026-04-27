@@ -1,0 +1,221 @@
+# Release pipeline — runs on every semver tag push.
+#
+# Flow (pure GitOps from step 3 onward):
+#   1. build-checkout       — docker build + push ghcr.io/.../checkout:$TAG
+#   2. apply-dtctl          — render dtctl/*.yaml with APP_VERSION + apply (dashboards, SLOs, Guardian)
+#   3. promote-via-argo     — bump deploy/helm/values.yaml's image.tag and appVersion → git push
+#                             Argo CD reconciles → Argo Rollouts kicks off the canary
+#   4. watch-rollout        — tail kubectl-argo-rollouts; succeeds on Healthy, fails on Degraded
+#   5. on-failure           — Guardian aborted the canary → re-stamp dtctl to previous tag,
+#                             post evidence as a commit comment
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write       # to push the values bump back to main
+  packages: write       # to push the image to ghcr.io
+  pull-requests: write  # to comment on the release commit on failure
+
+env:
+  APP_VERSION: ${{ github.ref_name }}
+  IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/checkout
+
+jobs:
+  ##############################################################################
+  # 1. Build + push the checkout image
+  ##############################################################################
+  build-checkout:
+    name: Build + push checkout image
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_REPO }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.APP_VERSION }}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.APP_VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            app.version=${{ env.APP_VERSION }}
+
+      - name: Build + push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: demo-app/services/checkout
+          file: demo-app/services/checkout/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ env.APP_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  ##############################################################################
+  # 2. Apply dtctl manifests (dashboards, SLOs, workflows, Guardian)
+  ##############################################################################
+  apply-dtctl:
+    name: Apply dtctl manifests + Guardian
+    needs: build-checkout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dtctl
+        run: |
+          curl -fsSL https://github.com/dynatrace-oss/dtctl/releases/latest/download/dtctl-linux-amd64 \
+            -o /usr/local/bin/dtctl && chmod +x /usr/local/bin/dtctl
+
+      - name: dtctl auth
+        env:
+          OAUTH_CLIENT_ID:     ${{ secrets.DT_OAUTH_CLIENT_ID }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.DT_OAUTH_CLIENT_SECRET }}
+          DT_ENVIRONMENT:      ${{ secrets.DT_ENVIRONMENT }}
+        run: |
+          dtctl auth login --oauth-client-id "$OAUTH_CLIENT_ID" \
+                           --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
+                           --env "$DT_ENVIRONMENT"
+          dtctl auth verify
+
+      - name: Render + apply dashboards / SLOs / workflows / Guardian
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+        run: |
+          ./scripts/stamp-version.sh | tee /tmp/rendered.yaml >/dev/null
+          dtctl diff -f /tmp/rendered.yaml || true
+          dtctl apply -f /tmp/rendered.yaml
+
+  ##############################################################################
+  # 3. Bump deploy/helm/values.yaml — Argo CD reconciles from here
+  ##############################################################################
+  promote-via-argo:
+    name: Bump image tag (Argo CD reconciles)
+    needs: apply-dtctl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rewrite deploy/helm/values.yaml (image.tag + appVersion)
+        run: |
+          # Both fields must move together so the chart renders with a consistent version.
+          sed -i "s|^  tag:.*|  tag: ${APP_VERSION}|"        deploy/helm/values.yaml
+          sed -i "s|^appVersion:.*|appVersion: ${APP_VERSION}|" deploy/helm/values.yaml
+
+          # Sanity check
+          grep -E "^  tag:|^appVersion:" deploy/helm/values.yaml
+
+      - name: Commit + push
+        run: |
+          git config user.name  "observe-resolve-bot"
+          git config user.email "bot@observe-resolve.dev"
+          git add deploy/helm/values.yaml
+          git commit -m "release(${APP_VERSION}): bump checkout image tag"
+          git push
+
+  ##############################################################################
+  # 4. Watch the Argo Rollouts canary — succeeds on Healthy, fails on Degraded
+  ##############################################################################
+  watch-rollout:
+    name: Watch Argo Rollouts canary
+    needs: promote-via-argo
+    runs-on: ubuntu-latest
+    if: ${{ secrets.KUBECONFIG_BASE64 != '' }}
+    steps:
+      - name: Install kubectl + argo-rollouts plugin
+        run: |
+          curl -fsSL https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64 \
+            -o /usr/local/bin/kubectl-argo-rollouts && chmod +x /usr/local/bin/kubectl-argo-rollouts
+
+      - name: Load kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG_BASE64 }}" | base64 -d > /tmp/kubeconfig
+          echo "KUBECONFIG=/tmp/kubeconfig" >> $GITHUB_ENV
+
+      - name: Tail the Rollout
+        run: |
+          # Block until Healthy (canary promoted) or Degraded (Guardian aborted).
+          # Timeout protects us against a hung Rollout.
+          kubectl-argo-rollouts -n otel-demo get rollout checkout --watch --timeout 20m
+          STATUS=$(kubectl-argo-rollouts -n otel-demo get rollout checkout -o json | jq -r '.status.phase')
+          echo "rollout phase: $STATUS"
+          [[ "$STATUS" == "Healthy" ]] || exit 1
+
+  ##############################################################################
+  # 5. On Argo Rollouts failure — re-stamp dtctl to previous tag + post evidence
+  ##############################################################################
+  on-failure:
+    name: Re-stamp dtctl to previous tag
+    needs: watch-rollout
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve previous tag
+        id: prev
+        run: |
+          PREV=$(git tag --list --sort=-v:refname 'v*.*.*' | sed -n '2p')
+          echo "tag=$PREV" >> "$GITHUB_OUTPUT"
+
+      - name: Install dtctl + auth
+        env:
+          OAUTH_CLIENT_ID:     ${{ secrets.DT_OAUTH_CLIENT_ID }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.DT_OAUTH_CLIENT_SECRET }}
+          DT_ENVIRONMENT:      ${{ secrets.DT_ENVIRONMENT }}
+        run: |
+          curl -fsSL https://github.com/dynatrace-oss/dtctl/releases/latest/download/dtctl-linux-amd64 \
+            -o /usr/local/bin/dtctl && chmod +x /usr/local/bin/dtctl
+          dtctl auth login --oauth-client-id "$OAUTH_CLIENT_ID" \
+                           --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
+                           --env "$DT_ENVIRONMENT"
+
+      - name: Re-stamp dashboards / SLOs with previous tag
+        env:
+          APP_VERSION: ${{ steps.prev.outputs.tag }}
+        run: ./scripts/stamp-version.sh | dtctl apply -f -
+
+      - name: Comment evidence on the release commit
+        uses: actions/github-script@v7
+        env:
+          PREV_TAG: ${{ steps.prev.outputs.tag }}
+        with:
+          script: |
+            const body = [
+              `### :rotating_light: Argo Rollouts aborted \`${process.env.APP_VERSION}\``,
+              ``,
+              `Site Reliability Guardian verdict = **fail** at a canary step.`,
+              `Traffic stayed on \`${process.env.PREV_TAG}\` — no full cutover happened.`,
+              `Dashboards + SLOs re-stamped to \`${process.env.PREV_TAG}\`.`,
+              ``,
+              `See the Rollouts UI for the AnalysisRun that tripped the gate:`,
+              `  \`kubectl-argo-rollouts -n otel-demo get rollout checkout\``
+            ].join('\n');
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              commit_sha: context.sha, body
+            });

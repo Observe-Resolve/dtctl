@@ -1,0 +1,130 @@
+# Agent activity dashboard — OPTIONAL BONUS, not applied by the episode scenarios.
+#
+# The on-camera scenarios for Ep. 09 do NOT apply this dashboard. It exists for
+# practitioners who want to instrument their own Claude Code runs via
+# scripts/run-instrumented.sh + weaver/registry/_agent.yaml and see the agent's
+# behavior alongside production telemetry.
+#
+# Skip freely. Nothing in the main path depends on it.
+apiVersion: platform.dynatrace.io/v1
+kind: Dashboard
+metadata:
+  name: agent-activity
+  labels:
+    owner: observe-and-resolve
+    episode: "09"
+    release: ${APP_VERSION}
+    generator: dtctl
+spec:
+  title: "Agent activity — ${APP_VERSION}"
+  description: |
+    Every Claude Code run on this repo is wrapped in an OpenTelemetry span
+    by scripts/run-instrumented.sh. This dashboard aggregates those spans
+    so the agent's behavior is observable in the same tenant as the
+    production telemetry it works on.
+  variables:
+    - key: app_version
+      type: constant
+      value: "${APP_VERSION}"
+    - key: agent_task
+      type: csv
+      values:
+        - "all"
+        - "agent.repair_drift_ticket"
+        - "agent.triage"
+        - "agent.release_review"
+        - "agent.generic_run"
+      defaultValue: "all"
+  layout:
+    columns: 12
+    rowHeight: 60
+  tiles:
+    - position: { x: 0, y: 0, w: 12, h: 3 }
+      type: markdown
+      content: |
+        ### Agent activity — **${APP_VERSION}**
+        Every run produced by `scripts/run-instrumented.sh`. Filter by task above.
+
+    - position: { x: 0, y: 3, w: 4, h: 5 }
+      type: single-value
+      title: "Runs (last 24h)"
+      query: |
+        fetch spans, from:now()-24h
+        | filter service.name == "claude-code-agent"
+        | filter $agent_task == "all" or span.name == $agent_task
+        | summarize count()
+
+    - position: { x: 4, y: 3, w: 4, h: 5 }
+      type: single-value
+      title: "Error rate (last 24h)"
+      query: |
+        fetch spans, from:now()-24h
+        | filter service.name == "claude-code-agent"
+        | filter $agent_task == "all" or span.name == $agent_task
+        | summarize err = countIf(outcome == "error") * 100.0 / count()
+      unit: "%"
+      thresholds:
+        - color: green
+          value: 0
+        - color: yellow
+          value: 5
+        - color: red
+          value: 15
+
+    - position: { x: 8, y: 3, w: 4, h: 5 }
+      type: single-value
+      title: "p95 resolution time"
+      query: |
+        fetch spans, from:now()-24h
+        | filter service.name == "claude-code-agent"
+        | filter span.name == "agent.repair_drift_ticket"
+        | summarize p95 = percentile(duration, 95) / 1000000000
+      unit: "s"
+
+    - position: { x: 0, y: 8, w: 6, h: 6 }
+      type: line-chart
+      title: "Runs per hour — by outcome"
+      query: |
+        fetch spans, from:now()-24h
+        | filter service.name == "claude-code-agent"
+        | filter $agent_task == "all" or span.name == $agent_task
+        | summarize runs = count(),
+                    by: {outcome, bin(timestamp, 15m)}
+
+    - position: { x: 6, y: 8, w: 6, h: 6 }
+      type: bar-chart
+      title: "Tool-call fanout (children per run, p50 / p95)"
+      query: |
+        fetch spans, from:now()-24h
+        | filter service.name == "claude-code-agent"
+        | filter $agent_task == "all" or span.name == $agent_task
+        | summarize p50 = percentile(tools.called, 50),
+                    p95 = percentile(tools.called, 95),
+                    by: {span.name}
+
+    - position: { x: 0, y: 14, w: 6, h: 6 }
+      type: table
+      title: "Per-ticket resolution time (last 7 days)"
+      query: |
+        fetch spans, from:now()-7d
+        | filter service.name == "claude-code-agent"
+        | filter span.name == "agent.repair_drift_ticket"
+        | summarize duration_s = max(duration) / 1000000000,
+                    outcome    = takeFirst(outcome),
+                    files      = takeFirst(files.changed),
+                    tools      = takeFirst(tools.called),
+                    by: {ticket.id}
+        | sort duration_s desc
+        | limit 25
+
+    - position: { x: 6, y: 14, w: 6, h: 6 }
+      type: bar-chart
+      title: "Error rate by skill stack"
+      query: |
+        fetch spans, from:now()-7d
+        | filter service.name == "claude-code-agent"
+        | summarize err = countIf(outcome == "error") * 100.0 / count(),
+                    runs = count(),
+                    by: {skill.names}
+        | filter runs >= 5
+        | sort err desc

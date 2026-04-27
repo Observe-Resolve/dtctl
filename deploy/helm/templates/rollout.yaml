@@ -1,0 +1,88 @@
+# Argo Rollouts canary for checkout.
+#
+# Image tag is templated from .Values.image.tag. CI bumps that on every git tag
+# in deploy/helm/values.yaml; Argo CD detects the change, re-renders this file,
+# and Argo Rollouts sees a new podSpec hash → kicks off the canary.
+#
+# Scaling-based canary (no service mesh / no Gateway API): at setWeight: 10
+# you get ~1 canary pod and 2 stable pods, kube-proxy round-robin handles
+# the traffic split. Each canary step pauses, then runs an AnalysisRun
+# against the SRG verdict.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: checkout
+  namespace: otel-demo
+  labels:
+    {{- include "checkout.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 5
+
+  selector:
+    matchLabels:
+      app: checkout
+
+  template:
+    metadata:
+      labels:
+        app: checkout
+        app.version: {{ .Values.appVersion | quote }}
+      annotations:
+        instrumentation.opentelemetry.io/inject-python: "true"
+    spec:
+      containers:
+        - name: checkout
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_VERSION
+              value: {{ .Values.appVersion | quote }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=otel-demo,deployment.environment=ep9-vibe-coded,app.version={{ .Values.appVersion }}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+  strategy:
+    canary:
+      canaryService: checkout-canary
+      stableService: checkout-stable
+      steps:
+        - setWeight: 10
+        - pause: { duration: {{ index .Values.canary.steps 1 "pauseSec" }}s }
+        - analysis:
+            templates:
+              - templateName: {{ .Values.analysis.templateName }}
+            args:
+              - name: app-version
+                value: {{ .Values.appVersion | quote }}
+              - name: canary-weight
+                value: "10"
+
+        - setWeight: 50
+        - pause: { duration: {{ index .Values.canary.steps 4 "pauseSec" }}s }
+        - analysis:
+            templates:
+              - templateName: {{ .Values.analysis.templateName }}
+            args:
+              - name: app-version
+                value: {{ .Values.appVersion | quote }}
+              - name: canary-weight
+                value: "50"
+
+        - setWeight: 100

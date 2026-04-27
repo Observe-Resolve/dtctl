@@ -1,0 +1,145 @@
+# PR gate — validates that the proposed change doesn't break the contract.
+# Runs on every pull request and on pushes to main.
+#
+#   1. weaver       — registry well-formed + no breaking changes vs main baseline
+#   2. dtctl        — manifests parse with a synthetic APP_VERSION
+#   3. helm-render  — deploy/helm/ Chart renders cleanly + lints
+#   4. checkout     — Docker image builds (no push) + unit tests pass
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write   # to post the weaver-diff comment on the PR
+
+jobs:
+  ##############################################################################
+  # 1. Weaver — semantic conventions gate
+  ##############################################################################
+  weaver:
+    name: Weaver · conventions gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Weaver
+        uses: open-telemetry/setup-weaver@v0
+        with:
+          version: "0.17.0"
+
+      - name: Registry check (well-formed)
+        run: weaver registry check -r weaver/registry
+
+      - name: Registry diff vs main baseline
+        id: diff
+        run: |
+          set -o pipefail
+          weaver registry diff \
+            -r weaver/registry \
+            --baseline-registry weaver/baselines/main \
+            --policy weaver/policies/no-breaking-changes.rego \
+            --diff-format markdown \
+            --output weaver-diff.md
+        continue-on-error: true
+
+      - name: Comment diff on the PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: weaver-diff
+          path: weaver-diff.md
+
+      - name: Fail if breaking changes detected
+        if: steps.diff.outcome != 'success'
+        run: |
+          echo "::error title=Weaver::Breaking change detected. See PR comment for details."
+          exit 1
+
+  ##############################################################################
+  # 2. dtctl — manifest validation
+  ##############################################################################
+  dtctl:
+    name: dtctl · manifest validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dtctl
+        run: |
+          curl -fsSL https://github.com/dynatrace-oss/dtctl/releases/latest/download/dtctl-linux-amd64 \
+            -o /usr/local/bin/dtctl
+          chmod +x /usr/local/bin/dtctl
+
+      - name: Render manifests with synthetic version
+        env:
+          APP_VERSION: v0.0.0-pr-${{ github.event.number }}
+        run: ./scripts/stamp-version.sh > /tmp/rendered.yaml
+
+      - name: Validate
+        run: dtctl validate -f /tmp/rendered.yaml
+
+  ##############################################################################
+  # 3. Helm chart — lint + render with a synthetic image tag
+  ##############################################################################
+  helm-render:
+    name: Helm · render deploy/helm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: helm lint
+        run: helm lint deploy/helm
+
+      - name: helm template (synthetic tag)
+        run: |
+          helm template otel-demo deploy/helm \
+              --set image.tag=v0.0.0-pr-${{ github.event.number }} \
+              --set appVersion=v0.0.0-pr-${{ github.event.number }} \
+              > /tmp/rendered.yaml
+          test -s /tmp/rendered.yaml
+          echo "rendered $(wc -l < /tmp/rendered.yaml) lines"
+
+  ##############################################################################
+  # 4. Checkout service — build image (no push) + unit tests
+  ##############################################################################
+  checkout:
+    name: Checkout · build + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: demo-app/services/checkout/requirements-test.txt
+
+      - name: Install test deps
+        run: pip install -r demo-app/services/checkout/requirements-test.txt
+
+      - name: pytest
+        working-directory: demo-app/services/checkout
+        run: pytest tests/ -v
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Docker build (no push) — catches Dockerfile breakage on PRs
+        uses: docker/build-push-action@v6
+        with:
+          context: demo-app/services/checkout
+          file: demo-app/services/checkout/Dockerfile
+          push: false
+          tags: ghcr.io/${{ github.repository_owner }}/checkout:pr-${{ github.event.number }}
+          build-args: |
+            APP_VERSION=v0.0.0-pr-${{ github.event.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

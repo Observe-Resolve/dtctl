@@ -1,0 +1,3 @@
+# DEPRECATED — see demo-app/manifests/gateway.yaml for the rollback note.
+# Argo Rollouts now does scaling-based canary; no HTTPRoute needed.
+# Safe to delete this file from your fork.

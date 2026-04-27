@@ -1,0 +1,3 @@
+# DEPRECATED — HTTPRoute patch RBAC no longer needed.
+# Argo Rollouts uses scaling-based canary (no Gateway API plugin).
+# Safe to delete this file from your fork.

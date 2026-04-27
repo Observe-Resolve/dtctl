@@ -1,0 +1,34 @@
+# Two Services for Argo Rollouts canary: stable + canary.
+# Rollouts updates each Service's selector to point at the right ReplicaSet
+# at every step.
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-stable
+  namespace: otel-demo
+  labels:
+    {{- include "checkout.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: checkout
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-canary
+  namespace: otel-demo
+  labels:
+    {{- include "checkout.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: checkout

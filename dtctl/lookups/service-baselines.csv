@@ -1,0 +1,8 @@
+service,baseline_p95_ms,baseline_error_rate_pct,baseline_req_per_hour,captured_at,source
+frontend,150,0.2,12000,2026-04-21,ep9-discovery
+checkout,890,4.5,3000,2026-04-21,ep9-discovery
+cart,45,0.1,8000,2026-04-21,ep9-discovery
+payment,200,0.0,2000,2026-04-21,ep9-discovery
+product-catalog,80,0.1,15000,2026-04-21,ep9-discovery
+recommendation,120,0.3,4000,2026-04-21,ep9-discovery
+shipping,60,0.0,1500,2026-04-21,ep9-discovery

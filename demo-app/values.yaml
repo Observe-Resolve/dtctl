@@ -1,0 +1,70 @@
+# otel-demo-light chart values.
+# Trimmed for a 2x8GB cluster.
+#
+# Schema notes (from the upstream opentelemetry-demo chart's values.schema.json):
+#   - `default:`         is for chart-wide defaults applied to EVERY component.
+#                        Only allows the chart-defined keys (envOverrides, image, etc.)
+#                        — do NOT nest `components` or `serviceAccount` under it.
+#   - `components:`      lives at the ROOT and overrides per-service settings.
+#   - `serviceAccount:`  lives at the ROOT.
+#   - Subchart toggles   (jaeger, grafana, prometheus, opensearch,
+#                        opentelemetry-collector) live at the ROOT, addressed by
+#                        their chart name.
+
+# ─── Defaults applied to every demo component ───────────────────────────────
+default:
+  envOverrides:
+    - name: OTEL_COLLECTOR_NAME
+      value: otel-collector.default.svc.cluster.local
+
+    - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+      value: delta
+
+# ─── ServiceAccount — created by deploy.sh, chart references it ─────────────
+serviceAccount:
+  create: false
+  name: opentelemetry-demo
+
+# ─── Subchart toggles (these are dependencies of the otel-demo chart) ──────
+opentelemetry-collector:
+  enabled: false        # the OpenTelemetry Operator manages our own gateway collector
+jaeger:
+  enabled: false
+grafana:
+  enabled: false
+prometheus:
+  enabled: false
+opensearch:
+  enabled: false
+
+# ─── Per-component overrides ────────────────────────────────────────────────
+# Total footprint across all enabled services + load gen: ~900m CPU / ~1.4 GiB.
+components:
+  # checkout is replaced by the Argo Rollout in deploy/helm/templates/rollout.yaml
+  # — chart's checkout MUST be disabled or you get two competing Deployments.
+  checkout:
+    enabled: false
+
+  frontend:
+    resources: { requests: { cpu: 50m,  memory: 128Mi }, limits: { cpu: 200m, memory: 192Mi } }
+  cart:
+    resources: { requests: { cpu: 40m,  memory:  96Mi }, limits: { cpu: 150m, memory: 128Mi } }
+  payment:
+    resources: { requests: { cpu: 40m,  memory:  96Mi }, limits: { cpu: 150m, memory: 128Mi } }
+  product-catalog:
+    resources: { requests: { cpu: 40m,  memory:  96Mi }, limits: { cpu: 150m, memory: 128Mi } }
+  recommendation:
+    resources: { requests: { cpu: 40m,  memory:  96Mi }, limits: { cpu: 150m, memory: 128Mi } }
+  shipping:
+    resources: { requests: { cpu: 30m,  memory:  64Mi }, limits: { cpu: 100m, memory:  96Mi } }
+  flagd:
+    resources: { requests: { cpu: 30m,  memory:  64Mi }, limits: { cpu: 100m, memory:  96Mi } }
+
+  load-generator:
+    enabled: true
+    resources: { requests: { cpu: 50m,  memory: 128Mi }, limits: { cpu: 200m, memory: 192Mi } }
+    envOverrides:
+      - name: LOCUST_USERS
+        value: "10"        # reduced from 20 to keep RPS steady on a small cluster
+      - name: LOCUST_SPAWN_RATE
+        value: "1"

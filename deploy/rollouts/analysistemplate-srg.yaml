@@ -1,0 +1,8 @@
+# SUPERSEDED — see deploy/helm/templates/analysistemplate-srg.yaml
+#
+# The AnalysisTemplate is now templated from the Helm chart at deploy/helm/,
+# so Argo CD owns it via the same Application that owns the Rollout. The
+# polling cadence (30s × 24 = 12-minute ceiling) is configurable in
+# deploy/helm/values.yaml under `analysis.*`.
+#
+# Safe to delete this file from your fork.

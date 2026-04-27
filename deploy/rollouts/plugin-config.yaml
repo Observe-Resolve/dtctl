@@ -1,0 +1,4 @@
+# DEPRECATED — Gateway API plugin no longer used.
+# The rollout now does scaling-based canary; Argo Rollouts manages the canary
+# replica count proportional to setWeight, no traffic-router plugin required.
+# Safe to delete this file from your fork.

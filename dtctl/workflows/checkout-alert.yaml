@@ -1,0 +1,68 @@
+# Alert workflow triggered when the checkout-availability SLO breaches.
+# Fires in Ep. 09 Act 3 when chaos/break-checkout.sh injects faults.
+apiVersion: platform.dynatrace.io/v1
+kind: Workflow
+metadata:
+  name: checkout-slo-breach
+  labels:
+    owner: observe-and-resolve
+    episode: "09"
+spec:
+  description: |
+    When checkout-availability SLO drops below target, enrich the alert with
+    top error types + a pre-filled investigation notebook, then ping Slack.
+  trigger:
+    type: slo-breach
+    sloName: checkout-availability
+    severity: page
+  tasks:
+    - name: fetch-top-errors
+      action: run-dql
+      query: |
+        fetch spans, from:now()-15m
+        | filter service.name == "checkout" and status == "ERROR"
+        | summarize count = count(),
+                    by: {exception.type, customer.tier, payment.method}
+        | sort count desc
+        | limit 5
+      output: topErrors
+
+    - name: baseline-compare
+      action: run-dql
+      dependsOn: [fetch-top-errors]
+      query: |
+        fetch lookup_table("service_baselines")
+        | filter service == "checkout"
+      output: baseline
+
+    - name: build-investigation-notebook
+      action: create-notebook
+      dependsOn: [fetch-top-errors]
+      template: notebooks/checkout-investigation-template.json
+      variables:
+        topErrors: "{{ tasks.fetch-top-errors.output }}"
+        baseline: "{{ tasks.baseline-compare.output }}"
+      output: notebookUrl
+
+    - name: notify-slack
+      action: send-slack
+      dependsOn: [build-investigation-notebook]
+      channel: "#oncall-ep9"
+      message: |
+        :rotating_light: *SLO breach — checkout-availability*
+        Current: {{ trigger.currentValue }}%  ·  Target: {{ trigger.target }}%
+        Error budget burned: {{ trigger.budgetBurned }}
+        Top errors:
+        {{#each tasks.fetch-top-errors.output }}
+          • {{ exception.type }} — {{ count }} (tier: {{ customer.tier }}, method: {{ payment.method }})
+        {{/each }}
+        Investigation notebook → {{ tasks.build-investigation-notebook.output }}
+
+    - name: tag-incident
+      action: tag-entity
+      dependsOn: [notify-slack]
+      entityType: service
+      entityName: checkout
+      tags:
+        - incident:ep9-demo
+        - triage:auto

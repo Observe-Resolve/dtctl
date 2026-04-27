@@ -1,0 +1,19 @@
+apiVersion: v2
+name: otel-demo-light
+description: |
+  Argo CD-watched chart for Observe & Resolve Episode 9. Renders a single
+  Argo Rollout for the checkout service, plus its canary/stable Services
+  and the SRG AnalysisTemplate. Bumping `image.tag` in values.yaml is the
+  trigger for a new release — Argo CD reconciles, Argo Rollouts walks the
+  canary, the Site Reliability Guardian decides promote-or-abort.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Henrik Rexed
+    url: https://github.com/Observe-Resolve
+keywords:
+  - dtctl
+  - observability-as-code
+  - argo-rollouts
+  - site-reliability-guardian
