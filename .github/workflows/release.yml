@@ -115,19 +115,24 @@ jobs:
             echo "Lookup table already exists or upload failed (non-fatal)"
 
       - name: Render + apply dashboards / SLOs / workflows / Guardian
-        env:
-          APP_VERSION: ${{ env.APP_VERSION }}
         run: |
+          # Strip 'v' prefix to match telemetry tags (app.version in OTEL attributes)
+          export APP_VERSION="${{ env.APP_VERSION }}"
+          export APP_VERSION="${APP_VERSION#v}"
+
           ./scripts/stamp-version.sh | tee /tmp/rendered.yaml >/dev/null
           dtctl diff -f /tmp/rendered.yaml || true
           dtctl apply -f /tmp/rendered.yaml
 
       - name: Trigger Guardian validation (send SDLC event)
         env:
-          APP_VERSION: ${{ env.APP_VERSION }}
           DT_ENVIRONMENT: ${{ secrets.DT_ENVIRONMENT }}
           DT_API_TOKEN: ${{ secrets.DT_API_TOKEN }}
         run: |
+          # Strip 'v' prefix to match Guardian name and telemetry tags
+          APP_VERSION="${{ env.APP_VERSION }}"
+          APP_VERSION="${APP_VERSION#v}"
+
           # Send SDLC deployment event to trigger guardian evaluation
           curl -X POST "https://${DT_ENVIRONMENT}/api/v2/events/ingest" \
             -H "Authorization: Api-Token ${DT_API_TOKEN}" \
