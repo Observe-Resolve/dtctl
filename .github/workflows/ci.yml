@@ -78,6 +78,18 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           dtctl version
 
+      - name: Configure dtctl context
+        env:
+          DT_ENVIRONMENT: ${{ secrets.DT_ENVIRONMENT }}
+          DT_OAUTH_CLIENT_ID: ${{ secrets.DT_OAUTH_CLIENT_ID }}
+          DT_OAUTH_CLIENT_SECRET: ${{ secrets.DT_OAUTH_CLIENT_SECRET }}
+        run: |
+          dtctl config set-context ci \
+            --environment "$DT_ENVIRONMENT" \
+            --oauth-client-id "$DT_OAUTH_CLIENT_ID" \
+            --oauth-client-secret "$DT_OAUTH_CLIENT_SECRET"
+          dtctl config use-context ci
+
       - name: Render manifests with synthetic version
         env:
           APP_VERSION: v0.0.0-pr-${{ github.event.number || github.run_id }}
