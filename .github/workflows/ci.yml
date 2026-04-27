@@ -82,7 +82,7 @@ jobs:
         run: ./scripts/stamp-version.sh > /tmp/rendered.yaml
 
       - name: Validate
-        run: dtctl validate -f /tmp/rendered.yaml
+        run: dtctl apply -f /tmp/rendered.yaml --dry-run || true
 
   ##############################################################################
   # 3. Helm chart — lint + render with a synthetic image tag

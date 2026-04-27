@@ -10,28 +10,28 @@ groups:
     type: attribute_group
     brief: "Attributes emitted by Claude Code when running via run-instrumented.sh."
     attributes:
-      - id: repo
+      - id: agent.repo
         type: string
         requirement_level: required
         stability: stable
         brief: "Repository slug the agent is operating on."
         examples: ["observe-resolve-ep9-dtctl"]
 
-      - id: model
+      - id: agent.model
         type: string
         requirement_level: recommended
         stability: stable
         brief: "Model identifier running the agent."
         examples: ["claude-sonnet-4.6", "claude-opus-4.6"]
 
-      - id: session
+      - id: agent.session
         type: string
         requirement_level: required
         stability: stable
         brief: "Stable identifier scoping all spans/logs from a single Claude run."
         examples: ["sess-1777000000-42"]
 
-      - id: repo_sha
+      - id: agent.repo_sha
         type: string
         requirement_level: recommended
         stability: experimental
