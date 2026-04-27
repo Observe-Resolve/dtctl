@@ -91,13 +91,9 @@ jobs:
 
       - name: Install dtctl
         run: |
-          DTCTL_VERSION=$(curl -s https://api.github.com/repos/dynatrace-oss/dtctl/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          curl -fsSL "https://github.com/dynatrace-oss/dtctl/releases/latest/download/dtctl_${DTCTL_VERSION}_linux_amd64.tar.gz" \
-            -o dtctl.tar.gz
-          tar -xzf dtctl.tar.gz
-          sudo mv dtctl /usr/local/bin/dtctl
-          sudo chmod +x /usr/local/bin/dtctl
-          rm dtctl.tar.gz
+          curl -fsSL https://raw.githubusercontent.com/dynatrace-oss/dtctl/main/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.local/bin:$PATH"
           dtctl version
 
       - name: dtctl auth
