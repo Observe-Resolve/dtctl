@@ -160,9 +160,12 @@ jobs:
 
       - name: Rewrite deploy/helm/values.yaml (image.tag + appVersion)
         run: |
+          # Strip 'v' prefix to match Docker tag (semver pattern strips it)
+          VERSION="${APP_VERSION#v}"
+
           # Both fields must move together so the chart renders with a consistent version.
-          sed -i "s|^  tag:.*|  tag: ${APP_VERSION}|"        deploy/helm/values.yaml
-          sed -i "s|^appVersion:.*|appVersion: ${APP_VERSION}|" deploy/helm/values.yaml
+          sed -i "s|^  tag:.*|  tag: ${VERSION}|"        deploy/helm/values.yaml
+          sed -i "s|^appVersion:.*|appVersion: ${VERSION}|" deploy/helm/values.yaml
 
           # Sanity check
           grep -E "^  tag:|^appVersion:" deploy/helm/values.yaml
