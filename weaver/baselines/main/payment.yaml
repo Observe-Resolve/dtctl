@@ -1,0 +1,45 @@
+groups:
+  # ── Attribute definitions ────────────────────────────────────────────────
+  - id: payment
+    type: attribute_group
+    prefix: payment
+    brief: "Payment service span attributes."
+    attributes:
+      - id: provider
+        type: string
+        requirement_level: required
+        stability: stable
+        brief: "Which external processor handled the charge."
+        examples: ["stripe", "adyen"]
+
+      - id: amount_usd
+        type: double
+        requirement_level: required
+        stability: stable
+        brief: "Charge amount in USD."
+        examples: [129.99]
+
+      - id: outcome
+        type:
+          allow_custom_values: false
+          members:
+            - id: success
+              value: "success"
+            - id: declined
+              value: "declined"
+            - id: error
+              value: "error"
+        requirement_level: required
+        stability: stable
+        brief: "Terminal outcome of the charge."
+
+  # ── Span definitions ─────────────────────────────────────────────────────
+  - id: payment.charge
+    type: span
+    span_kind: internal
+    prefix: payment
+    brief: "Span around the provider call."
+    attributes:
+      - ref: payment.provider
+      - ref: payment.amount_usd
+      - ref: payment.outcome

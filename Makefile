@@ -15,7 +15,8 @@ deploy:  ## deploy OTel demo to current kube context
 
 .PHONY: baseline
 baseline:  ## first apply of dtctl resources at APP_VERSION=v1.0.0
-	APP_VERSION=v1.0.0 ./scripts/stamp-version.sh | dtctl apply -f -
+	APP_VERSION=v1.0.0 ./scripts/stamp-version.sh > /tmp/rendered.yaml
+	dtctl apply -f /tmp/rendered.yaml
 	./scripts/freeze-baseline.sh
 
 .PHONY: weaver-check
@@ -25,7 +26,8 @@ weaver-check:  ## validate semantic conventions locally
 
 .PHONY: dtctl-validate
 dtctl-validate:  ## validate dtctl manifests (syntactic)
-	APP_VERSION=v0.0.0-dev ./scripts/stamp-version.sh | dtctl validate -f -
+	APP_VERSION=v0.0.0-dev ./scripts/stamp-version.sh > /tmp/rendered-dev.yaml
+	dtctl apply -f /tmp/rendered-dev.yaml --dry-run
 
 .PHONY: scenario-1
 scenario-1:  ## GREEN: feat cart.size → Weaver ✓ → dtctl apply @ v1.1.0
@@ -43,7 +45,8 @@ scenario-3:  ## GUARDIAN: v1.1.2 regression → SRG fails → auto-rollback
 rollback:  ## re-stamp dtctl manifests to TAG=vX.Y.Z (after Argo Rollouts aborts a canary)
 	@if [ -z "$(TAG)" ]; then echo "Usage: make rollback TAG=v1.1.1"; exit 1; fi
 	@echo "Re-stamping dtctl manifests to $(TAG) (dashboards/SLOs/Guardian will reflect what's actually serving traffic)"
-	APP_VERSION=$(TAG) ./scripts/stamp-version.sh | dtctl apply -f -
+	APP_VERSION=$(TAG) ./scripts/stamp-version.sh > /tmp/rendered-rollback.yaml
+	dtctl apply -f /tmp/rendered-rollback.yaml
 	@echo "Done. Verify in Dynatrace that the dashboard's version badge reads $(TAG)."
 
 .PHONY: clean
