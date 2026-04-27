@@ -10,7 +10,7 @@
 # what was pushed to ghcr.io.
 
 image:
-  repository: ghcr.io/Observe-Resolve/checkout
+  repository: ghcr.io/observe-resolve/checkout
   tag: v1.0.0
   pullPolicy: IfNotPresent
 
