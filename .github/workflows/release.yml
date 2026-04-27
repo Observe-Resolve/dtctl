@@ -98,14 +98,12 @@ jobs:
 
       - name: dtctl auth
         env:
-          OAUTH_CLIENT_ID:     ${{ secrets.DT_OAUTH_CLIENT_ID }}
-          OAUTH_CLIENT_SECRET: ${{ secrets.DT_OAUTH_CLIENT_SECRET }}
-          DT_ENVIRONMENT:      ${{ secrets.DT_ENVIRONMENT }}
+          DT_API_TOKEN:   ${{ secrets.DT_API_TOKEN }}
+          DT_ENVIRONMENT: ${{ secrets.DT_ENVIRONMENT }}
         run: |
-          dtctl auth login --oauth-client-id "$OAUTH_CLIENT_ID" \
-                           --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
-                           --env "$DT_ENVIRONMENT"
-          dtctl auth verify
+          dtctl config set-credentials default --token "$DT_API_TOKEN"
+          dtctl config use-context default
+          dtctl config set-environment "$DT_ENVIRONMENT"
 
       - name: Upload lookup tables (baseline metrics)
         run: |
@@ -125,22 +123,11 @@ jobs:
         env:
           APP_VERSION: ${{ env.APP_VERSION }}
           DT_ENVIRONMENT: ${{ secrets.DT_ENVIRONMENT }}
-          OAUTH_CLIENT_ID: ${{ secrets.DT_OAUTH_CLIENT_ID }}
-          OAUTH_CLIENT_SECRET: ${{ secrets.DT_OAUTH_CLIENT_SECRET }}
+          DT_API_TOKEN: ${{ secrets.DT_API_TOKEN }}
         run: |
           # Send SDLC deployment event to trigger guardian evaluation
-          # Get OAuth token
-          TOKEN=$(curl -s -X POST "https://${DT_ENVIRONMENT}/sso/oauth2/token" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "grant_type=client_credentials" \
-            -d "client_id=${OAUTH_CLIENT_ID}" \
-            -d "client_secret=${OAUTH_CLIENT_SECRET}" \
-            -d "scope=storage:events:write" \
-            | jq -r '.access_token')
-
-          # Send SDLC event
           curl -X POST "https://${DT_ENVIRONMENT}/api/v2/events/ingest" \
-            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Authorization: Api-Token ${DT_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{
               "eventType": "CUSTOM_DEPLOYMENT",
