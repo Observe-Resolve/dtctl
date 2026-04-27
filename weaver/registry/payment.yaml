@@ -2,33 +2,35 @@ groups:
   # ── Attribute definitions ────────────────────────────────────────────────
   - id: payment
     type: attribute_group
-    prefix: payment
     brief: "Payment service span attributes."
     attributes:
-      - id: provider
+      - id: payment.provider
         type: string
         requirement_level: required
         stability: stable
         brief: "Which external processor handled the charge."
         examples: ["stripe", "adyen"]
 
-      - id: amount_usd
+      - id: payment.amount_usd
         type: double
         requirement_level: required
         stability: stable
         brief: "Charge amount in USD."
         examples: [129.99]
 
-      - id: outcome
+      - id: payment.outcome
         type:
           allow_custom_values: false
           members:
             - id: success
               value: "success"
+              stability: stable
             - id: declined
               value: "declined"
+              stability: stable
             - id: error
               value: "error"
+              stability: stable
         requirement_level: required
         stability: stable
         brief: "Terminal outcome of the charge."
@@ -37,7 +39,7 @@ groups:
   - id: payment.charge
     type: span
     span_kind: internal
-    prefix: payment
+    stability: stable
     brief: "Span around the provider call."
     attributes:
       - ref: payment.provider

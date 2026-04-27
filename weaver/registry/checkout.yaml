@@ -6,47 +6,52 @@ groups:
   # ── Attribute definitions ────────────────────────────────────────────────
   - id: checkout
     type: attribute_group
-    prefix: checkout
     brief: "Attributes emitted by the checkout service."
     attributes:
-      - id: customer.tier
+      - id: checkout.customer.tier
         type:
           allow_custom_values: false
           members:
             - id: free
               value: "free"
+              stability: stable
             - id: plus
               value: "plus"
+              stability: stable
             - id: enterprise
               value: "enterprise"
+              stability: stable
         requirement_level: required
         stability: stable
         brief: "Customer subscription tier for the order."
         examples: ["enterprise"]
 
-      - id: payment.method
+      - id: checkout.payment.method
         type:
           allow_custom_values: false
           members:
             - id: credit_card
               value: "credit_card"
+              stability: stable
             - id: paypal
               value: "paypal"
+              stability: stable
             - id: wallet
               value: "wallet"
+              stability: stable
         requirement_level: required
         stability: stable
         brief: "Payment method used for the order."
         examples: ["credit_card"]
 
-      - id: cart.size
+      - id: checkout.cart.size
         type: int
         requirement_level: recommended
         stability: experimental
         brief: "Number of distinct line items in the cart at checkout."
         examples: [1, 5]
 
-      - id: order.total_usd
+      - id: checkout.order.total_usd
         type: double
         requirement_level: recommended
         stability: stable
@@ -57,7 +62,7 @@ groups:
   - id: checkout.place_order
     type: span
     span_kind: server
-    prefix: checkout
+    stability: stable
     brief: "Span emitted when the checkout service places an order."
     attributes:
       - ref: checkout.customer.tier
