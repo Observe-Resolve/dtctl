@@ -2,13 +2,11 @@
 # Fires when Argo Rollouts starts a canary deployment.
 # Sends an SDLC event that kicks off the Site Reliability Guardian validation.
 #
-# NOTE: This workflow assumes the Dynatrace platform provides implicit authentication
-# for internal API calls. If you see 401 errors, add an Authorization header with
-# a token from the Credential Vault.
+# Long-lived: no version in the name. The guardian is version-agnostic.
 title: "Checkout Release Guardian Validation"
 description: |
   Triggered by Kubernetes deployment events for the checkout service.
-  Sends an SDLC deployment event to the checkout-release-${APP_VERSION} guardian,
+  Sends an SDLC deployment event to the checkout-release-guardian,
   which starts the 10-minute evaluation window for the three objectives.
 private: false
 isdeployed: true
@@ -18,7 +16,7 @@ trigger:
     config:
       eventType: K8S_DEPLOYMENT
       eventFilter:
-        query: "dt.entity.cloud_application=='CLOUD_APPLICATION-CHECKOUT' AND deployment.version=='${APP_VERSION}'"
+        query: "dt.entity.cloud_application=='CLOUD_APPLICATION-CHECKOUT'"
 tasks:
   send_sdlc_event:
     name: send-sdlc-event
@@ -32,15 +30,14 @@ tasks:
       payload: |
         {
           "eventType": "CUSTOM_DEPLOYMENT",
-          "title": "Checkout ${APP_VERSION} canary deployment",
+          "title": "Checkout canary deployment",
           "entitySelector": "type(SERVICE),entityName.equals(\"checkout\")",
           "properties": {
             "dt.event.deployment": "true",
             "dt.event.deployment.name": "checkout",
-            "dt.event.deployment.version": "${APP_VERSION}",
             "dt.event.deployment.release_stage": "production",
             "dt.event.deployment.release_product": "checkout",
-            "guardian.name": "checkout-release-${APP_VERSION}",
+            "guardian.name": "checkout-release-guardian",
             "deployment.type": "canary"
           }
         }
@@ -55,10 +52,8 @@ tasks:
     description: Log guardian validation start to traces
     input:
       query: |
-        // Emit a synthetic span marker for observability
         fetch spans, from:now()-1m
         | filter service.name == "checkout"
-        | filter app.version == "${APP_VERSION}"
         | limit 1
     position:
       x: 0

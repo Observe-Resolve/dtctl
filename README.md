@@ -124,7 +124,7 @@ chmod 777 demo-app/deploy.sh
 
 ## Apply the baseline dtctl resources
 
-Let's apply the baseline `dtctl` manifests at `v1.0.0` — dashboards, SLOs, workflows, and the Site Reliability Guardian.
+Let's apply the baseline `dtctl` manifests at `v1.0.2` — dashboards, SLOs, workflows, and the Site Reliability Guardian.
 
 First authenticate dtctl against your tenant:
 ```shell

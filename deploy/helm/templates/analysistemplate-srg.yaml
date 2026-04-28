@@ -39,7 +39,7 @@ spec:
                     args:
                       - |
                         set -euo pipefail
-                        GUARDIAN="checkout-release-{{ "{{args.app-version}}" }}"
+                        GUARDIAN="checkout-release-guardian"
                         dtctl auth login --oauth-client-id "$OAUTH_CLIENT_ID" \
                                          --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
                                          --env "$DT_ENVIRONMENT" >/dev/null

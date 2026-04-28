@@ -1,6 +1,23 @@
-# Two Services for Argo Rollouts canary: stable + canary.
-# Rollouts updates each Service's selector to point at the right ReplicaSet
-# at every step.
+# Three Services:
+#   1. checkout        — the name other otel-demo services resolve (e.g. frontend → CHECKOUT_ADDR=checkout:8080)
+#   2. checkout-stable — Argo Rollouts selector for stable ReplicaSet
+#   3. checkout-canary — Argo Rollouts selector for canary ReplicaSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout
+  namespace: otel-demo
+  labels:
+    {{- include "checkout.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: checkout
+---
 apiVersion: v1
 kind: Service
 metadata:

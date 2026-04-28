@@ -79,7 +79,7 @@ The script does the following, in order:
 7. **Argo Rollouts + SRG AnalysisTemplate** — applies the controller, then `srg-verdict` AnalysisTemplate.
 8. **otel-demo-light** — `helm upgrade --install otel-demo open-telemetry/opentelemetry-demo --values demo-app/values.yaml`.
 9. **DynaKube** — `kubectl apply -f demo-app/manifests/dynakube.yaml`, waits for Ready.
-10. **Argo CD Application** — `kubectl apply -f deploy/argocd/application.yaml`, then seeds `deploy/helm/values.yaml` with `tag: v1.0.0` — Argo CD reconciles from here.
+10. **Argo CD Application** — `kubectl apply -f deploy/argocd/application.yaml`, then seeds `deploy/helm/values.yaml` with `tag: 1.0.2` — Argo CD reconciles from here.
 
 Token scopes:
 
@@ -146,9 +146,9 @@ DT_DATA_INGEST_TOKEN=dt0c01.XXXX...     # metrics.ingest, logs.ingest, events.in
 ## What we changed vs upstream otel-demo-light
 
 1. **Chart's built-in collector disabled** — the OpenTelemetry Operator's `gateway` collector is the single OTLP egress.
-2. **Chart's `checkout` component disabled.** We ship our own checkout service — see [`demo-app/services/checkout/`](services/checkout/README.md). Vendored Python FastAPI, ~80 lines, easy to edit on camera. The Argo Rollout in `deploy/rollouts/rollout.yaml` runs *our* image (`ghcr.io/henrikrexed/checkout:$TAG`), not the chart's.
+2. **Chart's `checkout` component disabled.** We ship our own checkout service — see [`demo-app/services/checkout/`](services/checkout/README.md). Vendored Python gRPC server with manual OTel instrumentation, compatible with the upstream otel-demo protocol. The Argo Rollout in `deploy/helm/templates/rollout.yaml` runs *our* image (`ghcr.io/observe-resolve/checkout:$TAG`), not the chart's.
 3. **Every service points `OTEL_EXPORTER_OTLP_ENDPOINT`** at the operator-managed gateway collector.
-4. **`customer.tier` and `payment.method` span attributes** in `checkout.place_order` — used by the dashboard tile and the drift scenario in Beat 2. (See `demo-app/services/checkout/main.py`.)
+4. **`customer.tier` and `payment.method` span attributes** in `oteldemo.CheckoutService/PlaceOrder` — used by the dashboard tile and the drift scenario in Beat 2. (See `demo-app/services/checkout/main.py`.)
 5. **Three patch scripts** under `services/checkout/patches/` that the scenario runners call to apply Beat 1 / Beat 2 / Beat 3 code changes deterministically.
 6. **All resource limits trimmed** to fit 2×8 GiB (see table above).
 

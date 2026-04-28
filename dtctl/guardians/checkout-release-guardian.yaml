@@ -1,24 +1,19 @@
 # Site Reliability Guardian — release gate for checkout.
 # Applied on every release by .github/workflows/release.yml.
-# Evaluates three objectives for the newly-deployed APP_VERSION.
+# Evaluates three objectives for the newly-deployed version.
 #
-# Once applied, Dynatrace automatically evaluates the guardian. The Argo Rollouts
-# AnalysisTemplate polls `dtctl get guardian-run` for the verdict.
+# Long-lived: no version in the name. Same guardian is reused across releases.
+# Dynatrace detects the active version via service.version / app.kubernetes.io/version.
 
 schemaId: "app:dynatrace.site.reliability.guardian:guardians"
 scope: "environment"
 value:
-  name: "checkout-release-${APP_VERSION}"
-  description: "Post-deploy validation for checkout release ${APP_VERSION}."
+  name: "checkout-release-guardian"
+  description: "Post-deploy validation for checkout releases."
   tags:
     - "owner:observe-and-resolve"
     - "episode:09"
-    - "release:${APP_VERSION}"
     - "kind:release-gate"
-
-  variables:
-    - name: "app_version"
-      definition: "${APP_VERSION}"
 
   objectives:
     - name: "checkout-availability"

@@ -190,8 +190,8 @@ echo "Registering the Argo CD Application"
 sed -i '' "s,CLUSTER_NAME_TO_REPLACE,$CLUSTERNAME," deploy/argocd/application.yaml
 kubectl apply -f deploy/argocd/application.yaml
 
-echo "Seeding deploy/helm/values.yaml at v1.0.0 (Argo CD reconciles from here)"
-sed -i '' "s,^  tag:.*,  tag: v1.0.0," deploy/helm/values.yaml
+echo "Seeding deploy/helm/values.yaml at 1.0.2 (Argo CD reconciles from here)"
+sed -i '' "s,^  tag:.*,  tag: 1.0.2," deploy/helm/values.yaml
 
 echo ""
 echo "================================================================================"

@@ -191,9 +191,9 @@ $ git tag v1.1.0 && git push --tags
 
 **VOICEOVER:** Tag `v1.1.0` and push. Watch what the release workflow does. It's a four-step dance.
 
-**VOICEOVER:** Step one: build and push the container image. Step two: run `dtctl apply` on dashboards, workflows, and the guardian. The guardian is the only resource that carries a version in its name — because it's a release gate, one per deploy. Dashboards and SLOs? They're long-lived. One dashboard, one set of SLOs, shared across all releases.
+**VOICEOVER:** Step one: build and push the container image. Step two: run `dtctl apply` on dashboards, workflows, and the guardian. Every resource is long-lived and version-agnostic — one dashboard, one set of SLOs, one guardian, shared across all releases. Dynatrace detects which version is running through `app.kubernetes.io/version` labels and SDLC events.
 
-**VOICEOVER:** Pro tip number two: don't create a dashboard per release. After a year of weekly releases, you'd have fifty orphaned dashboards. Instead, make your SLOs and dashboards version-agnostic. Use a dashboard variable to filter by release when you need to. The Guardian is your per-release gate — that's where the version belongs.
+**VOICEOVER:** Pro tip number two: don't create resources per release. After a year of weekly releases, you'd have fifty orphaned dashboards and guardians. Instead, make everything version-agnostic — dashboards, SLOs, guardians, workflows. `dtctl apply` is idempotent, so re-applying on every release just ensures the latest definitions are in the tenant. No orphans. No cleanup.
 
 **VOICEOVER:** Step three: bump the Helm values file to point at `image.tag: v1.1.0`, commit, and push. Notice what we didn't do? We didn't run `helm upgrade`. That's Argo's job now.
 
@@ -379,7 +379,7 @@ $ git tag v1.1.2 && git push --tags
 **SCREEN:** GitHub Actions log recording. Three steps highlighted as they run, with line-by-line reveals.
 
 ```
-✓ apply dtctl — Guardian "checkout-release-v1.1.2" registered
+✓ apply dtctl — Guardian "checkout-release-guardian" updated
   ├─ 3 objectives: checkout-availability ≥99%, frontend-p95 <200ms, error-budget-burn <1.0
   └─ evaluation window: 10 minutes starting now
 
@@ -396,7 +396,7 @@ $ git tag v1.1.2 && git push --tags
 
 **VOICEOVER:** Argo Rollouts promotes one canary pod. Ten percent of traffic hitting `v1.1.2`. Ninety percent still on `v1.1.1`. Two-minute soak — let the new code run under real load. Then the AnalysisRun fires.
 
-**VOICEOVER:** What's that AnalysisRun doing? It's a Kubernetes Job running in the cluster. Every thirty seconds it calls `dtctl get guardian-run --guardian checkout-release-v1.1.2 --latest` and reads the verdict. Pending? Keep waiting. Pass? Promote to 50%. Fail? Abort and drain the canary.
+**VOICEOVER:** What's that AnalysisRun doing? It's a Kubernetes Job running in the cluster. Every thirty seconds it calls `dtctl get guardian-run --guardian checkout-release-guardian --latest` and reads the verdict. Pending? Keep waiting. Pass? Promote to 50%. Fail? Abort and drain the canary.
 
 **VOICEOVER:** Let's watch the Guardian evaluate.
 
@@ -411,7 +411,7 @@ $ git tag v1.1.2 && git push --tags
 ```
 ┌─ Site Reliability Guardian Verdict ─────────────────────────────┐
 │                                                                  │
-│  Guardian: checkout-release-v1.1.2                               │
+│  Guardian: checkout-release-guardian                              │
 │  Evaluation: 10:00 minutes                                       │
 │  Result: FAIL                                                    │
 │                                                                  │
@@ -452,10 +452,10 @@ AnalysisRun: https://argocd.example.com/rollouts/checkout/analysisrun-abc123
 Guardian run: https://dynatrace.example.com/ui/guardians/runs/xyz789
 
 Dashboards and SLOs are version-agnostic — no re-stamping needed.
-Only the per-release Guardian (checkout-release-v1.1.2) was specific to this deploy.
+Every dtctl resource is version-agnostic — nothing to re-stamp or undo.
 ```
 
-**VOICEOVER:** And CI closes the loop. It posts a comment on the release commit. Objective that failed, by how much, links to the AnalysisRun and the Guardian evaluation. Everything you need to debug. Notice what we didn't have to do — re-stamp dashboards or SLOs. They're version-agnostic. The only per-release resource was the Guardian, and that's by design. One less thing to undo when a release fails.
+**VOICEOVER:** And CI closes the loop. It posts a comment on the release commit. Objective that failed, by how much, links to the AnalysisRun and the Guardian evaluation. Everything you need to debug. Notice what we didn't have to do — nothing. Every dtctl resource is version-agnostic. No re-stamping dashboards, no re-creating SLOs, no cleaning up orphaned guardians. The rollback is just Argo draining the canary. That's it.
 
 **VOICEOVER:** Zero pages. Zero Slack alerts. Zero humans woken up. The pipeline detected the regression, stopped the rollout, and documented what happened. I'm asleep. My users are fine. That's the goal.
 
