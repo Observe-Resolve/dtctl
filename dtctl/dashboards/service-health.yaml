@@ -1,6 +1,7 @@
 # Service health dashboard for the otel-demo namespace.
-# Long-lived: no version in the name. Scoped to k8s.cluster.name + k8s.namespace.name.
+# Long-lived: no version in the name. Scoped to k8s.namespace.name == "otel-demo".
 name: "otel-demo-service-health"
+id: "ff4572a9-fac8-4dca-9699-dcf00d7cc938"
 type: dashboard
 content:
   annotations: []
@@ -13,209 +14,239 @@ content:
         to: now()
   layouts:
     "1":
+      h: 3
+      w: 24
       x: 0
       "y": 0
-      w: 24
-      h: 3
     "2":
+      h: 4
+      w: 12
       x: 0
       "y": 3
-      w: 12
-      h: 4
     "3":
+      h: 4
+      w: 12
       x: 12
       "y": 3
-      w: 12
-      h: 4
     "4":
+      h: 6
+      w: 12
       x: 0
       "y": 7
-      w: 12
-      h: 6
     "5":
+      h: 6
+      w: 12
       x: 12
       "y": 7
-      w: 12
-      h: 6
     "6":
+      h: 5
+      w: 12
       x: 0
       "y": 13
-      w: 12
-      h: 5
     "7":
+      h: 5
+      w: 12
       x: 12
       "y": 13
-      w: 12
-      h: 5
     "8":
+      h: 6
+      w: 24
       x: 0
       "y": 18
-      w: 24
-      h: 6
   tiles:
     "1":
-      title: ""
-      type: markdown
       content: |
         ### otel-demo · service health
 
-        All tiles are scoped to `k8s.cluster.name == "observeresolve-ep9-demo"` and the `otel-demo` namespace.
+        All tiles are scoped to `k8s.namespace.name == "otel-demo"`.
+      type: markdown
     "2":
-      title: "Active services"
-      type: data
+      davis:
+        davisVisualization:
+          isAvailable: true
+        enabled: false
       query: |
         fetch spans, from:now()-5m
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | filter k8s.namespace.name == "otel-demo"
         | summarize count = count(), by:{service.name}
         | sort count desc
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Active services
+      type: data
       visualization: table
       visualizationSettings:
         autoSelectVisualization: false
         table:
           linewrapEnabled: true
+    "3":
       davis:
-        enabled: false
         davisVisualization:
           isAvailable: true
-    "3":
-      title: "Error rate per service (5m)"
-      type: data
+        enabled: false
       query: |
         fetch spans, from:now()-5m
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | filter k8s.namespace.name == "otel-demo"
         | summarize total = count(),
-                    errors = countIf(status == "ERROR"),
+                    errors = countIf(span.status_code == "error"),
                     by:{service.name}
-        | fieldsAdd error_rate = errors * 100.0 / total
+        | fieldsAdd error_rate = asDouble(errors) * 100.0 / asDouble(total)
         | sort error_rate desc
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Error rate per service (5m)
+      type: data
       visualization: table
       visualizationSettings:
         autoSelectVisualization: false
         table:
           linewrapEnabled: true
+    "4":
       davis:
-        enabled: false
         davisVisualization:
           isAvailable: true
-    "4":
-      title: "Request rate per service"
-      type: data
+        enabled: false
       query: |
         fetch spans, from:now()-1h
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | filter k8s.namespace.name == "otel-demo"
         | makeTimeseries req = count(), interval:1m, by:{service.name}
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Request rate per service
+      type: data
       visualization: lineChart
       visualizationSettings:
         autoSelectVisualization: false
         chartSettings:
           legend:
             position: bottom
-            showLegend: true
+    "5":
       davis:
-        enabled: false
         davisVisualization:
           isAvailable: true
-    "5":
-      title: "p95 latency per service"
-      type: data
+        enabled: false
       query: |
         fetch spans, from:now()-30m
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | filter k8s.namespace.name == "otel-demo"
         | summarize p95 = percentile(duration, 95) / 1000000, by:{service.name}
         | sort p95 desc
-      visualization: barChart
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: p95 latency per service
+      type: data
+      visualization: categoricalBarChart
       visualizationSettings:
         autoSelectVisualization: false
         unitsOverrides:
-          - identifier: p95
+          - added: 1.777381830818e+12
             baseUnit: millisecond
-            displayUnit: null
+            cascade: null
             decimals: 1
+            delimiter: false
+            displayUnit: null
+            identifier: p95
+            suffix: ""
+    "6":
       davis:
-        enabled: false
         davisVisualization:
           isAvailable: true
-    "6":
-      title: "Checkout PlaceOrder count (1h)"
-      type: data
+        enabled: false
       query: |
         fetch spans, from:now()-1h
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | makeTimeseries orders = count(), interval:5m
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Checkout PlaceOrder count (1h)
+      type: data
       visualization: lineChart
       visualizationSettings:
         autoSelectVisualization: false
+    "7":
       davis:
-        enabled: false
         davisVisualization:
           isAvailable: true
-    "7":
-      title: "Checkout error rate (5m)"
-      type: data
+        enabled: false
       query: |
         fetch spans, from:now()-5m
         | filter service.name == "checkout"
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
-        | summarize err = countIf(status == "ERROR") * 100.0 / count()
+        | summarize err = countIf(span.status_code == "error") * 100.0 / count()
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Checkout error rate (5m)
+      type: data
       visualization: singleValue
       visualizationSettings:
         autoSelectVisualization: false
+        coloring:
+          colorRules:
+            - colorMode: custom-color
+              comparator: '>'
+              customColor:
+                Default: '#c62239'
+              field: err
+              value: 3
         singleValue:
-          showLabel: true
-          label: "Error Rate"
+          label: Error Rate
           recordField: err
-        thresholds:
-          - field: err
-            id: 1
-            isEnabled: true
-            rules:
-              - color:
-                  Default: "#2f6862"
-                comparator: "<="
-                id: 0
-                value: 1
-              - color:
-                  Default: "#eea53c"
-                comparator: "<="
-                id: 1
-                value: 3
-              - color:
-                  Default: "#c62239"
-                comparator: ">"
-                id: 2
-                value: 3
         unitsOverrides:
-          - identifier: err
-            unit: "%"
+          - added: 1.77738183082e+12
+            baseUnit: '%'
+            cascade: null
             decimals: 2
+            delimiter: false
+            identifier: err
+            suffix: ""
+    "8":
       davis:
-        enabled: false
         davisVisualization:
           isAvailable: true
-    "8":
-      title: "Checkout errors by exception type"
-      type: data
+        enabled: false
       query: |
         fetch spans, from:now()-1h
-        | filter service.name == "checkout" and status == "ERROR"
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
+        | filter service.name == "checkout" and span.status_code == "error"
         | summarize errors = count(),
                     avg_duration_ms = avg(duration) / 1000000,
                     by:{exception.type, span.name}
         | sort errors desc
         | limit 20
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Checkout errors by exception type
+      type: data
       visualization: table
       visualizationSettings:
         autoSelectVisualization: false
         table:
           linewrapEnabled: true
-      davis:
-        enabled: false
-        davisVisualization:
-          isAvailable: true
+  variables: []
+  version: 21

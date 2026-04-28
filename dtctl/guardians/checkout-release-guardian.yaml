@@ -23,9 +23,8 @@ value:
         fetch spans
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
-        | summarize total = count(), errors = countIf(status == "ERROR")
-        | fieldsAdd ok = ((total - errors) / total) * 100.0
+        | summarize total = count(), good = countIf(span.status_code == "error")
+        | fieldsAdd ok = ((asLong(total) - asLong(good)) / asLong(total)) * 100.0
       displayUnit:
         base: "percent"
         display: "%"
@@ -42,7 +41,6 @@ value:
       dqlQuery: |
         fetch spans
         | filter service.name == "frontend" and span.kind == "server"
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | summarize p95 = percentile(duration, 95) / 1000000
       displayUnit:
         base: "millisecond"
@@ -60,11 +58,10 @@ value:
       dqlQuery: |
         fetch spans
         | filter service.name == "checkout"
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | summarize
-            errors = countIf(status == "ERROR"),
+            errors = countIf(span.status_code == "error"),
             total = count()
-        | fieldsAdd burn = (errors / total) / 0.01
+        | fieldsAdd burn = (asLong(errors) / asLong(total)) / 0.01
       comparisonOperator: "LESS_THAN_OR_EQUAL"
       target: 1.0
       warning: 0.5

@@ -11,9 +11,8 @@ customSli:
     fetch spans
     | filter service.name == "checkout"
     | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
-    | filter k8s.cluster.name == "observeresolve-ep9-demo"
-    | summarize total = count(), errors = countIf(status == "ERROR")
-    | fieldsAdd sli = ((total - errors) / total) * 100
+    | summarize total = count(), good = countIf(span.status_code == "error")
+    | fieldsAdd sli = ((asLong(total) - asLong(good)) / asLong(total)) * 100
 criteria:
   - name: "payment-success"
     target: 99.9

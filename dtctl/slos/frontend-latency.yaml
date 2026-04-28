@@ -8,9 +8,8 @@ customSli:
   indicator: |
     fetch spans
     | filter service.name == "frontend" and span.kind == "server"
-    | filter k8s.cluster.name == "observeresolve-ep9-demo"
     | summarize total = count(), fast = countIf(duration / 1000000 < 200)
-    | fieldsAdd sli = (fast / total) * 100
+    | fieldsAdd sli = (asLong(fast) / asLong(total)) * 100
 criteria:
   - name: "frontend-latency"
     target: 95.0
