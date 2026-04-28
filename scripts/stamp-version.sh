@@ -16,8 +16,10 @@ DTCTL_DIR="$REPO_ROOT/dtctl"
 export APP_VERSION
 
 first=1
-# Preserve the order we show on camera: dashboards → SLOs → workflows → guardians → lookups
-for dir in dashboards slos workflows guardians; do
+# Preserve the order we show on camera: dashboards → SLOs → guardians → lookups
+# NOTE: workflows are excluded — dtctl apply does not support them.
+# Workflows are handled separately with `dtctl create workflow -f`.
+for dir in dashboards slos guardians; do
   for f in "$DTCTL_DIR/$dir"/*.yaml; do
     [[ -e "$f" ]] || continue
     if [[ $first -eq 0 ]]; then printf '\n---\n'; fi

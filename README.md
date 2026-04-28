@@ -26,13 +26,15 @@ graph TD
     subgraph Dynatrace
         Dashboard["Dashboard"]
         SLOs["SLOs (3)"]
+        Workflow["Workflow<br/>(checkout-release-validation)"]
         Guardian["Site Reliability<br/>Guardian"]
     end
 
     subgraph Kubernetes [Kubernetes — otel-demo namespace]
         ArgoCD["Argo CD"]
         Rollouts["Argo Rollouts<br/>canary 10% → 50% → 100%"]
-        Analysis["AnalysisTemplate<br/>(polls SRG via dtctl)"]
+        Analysis["AnalysisTemplate<br/>(sends bizevent + polls verdict)"]
+        Notifications["Argo Notifications<br/>(GitHub issue on abort)"]
         OtelDemo["otel-demo<br/>services"]
         Collector["OTel Collector"]
     end
@@ -40,13 +42,19 @@ graph TD
     Repo -- "git tag v*" --> CI
     CI -- "1. Build + push<br/>Docker image" --> GHCR["ghcr.io"]
     CI -- "2. dtctl apply<br/>dashboards, SLOs,<br/>guardian" --> Dynatrace
-    CI -- "3. Bump values.yaml<br/>+ git push" --> Repo
+    CI -- "3. dtctl create workflow" --> Workflow
+    CI -- "4. Bump values.yaml<br/>+ git push" --> Repo
 
     Repo -- "watches master" --> ArgoCD
     ArgoCD -- "syncs Helm chart" --> Rollouts
     Rollouts --> Analysis
+    Analysis -- "SDLC bizevent" --> Workflow
+    Workflow -- "triggers evaluation" --> Guardian
     Analysis -- "dtctl get<br/>guardian-run" --> Guardian
-    Guardian -- "pass → promote<br/>fail → abort" --> Rollouts
+    Guardian -- "pass → promote" --> Rollouts
+    Guardian -- "fail → abort" --> Rollouts
+    Rollouts -- "on-rollout-aborted" --> Notifications
+    Notifications -- "creates issue" --> Repo
 
     OtelDemo -- "OTLP/gRPC" --> Collector
     Collector -- "traces, metrics, logs" --> Dynatrace
@@ -55,12 +63,16 @@ graph TD
 **Release flow:**
 1. Developer pushes a `v*.*.*` tag to GitHub
 2. CI builds the checkout Docker image and pushes it to `ghcr.io`
-3. CI runs `dtctl apply` to upsert dashboards, SLOs, guardian, and workflows in Dynatrace
-4. CI bumps `deploy/helm/values.yaml` with the new image tag and pushes to master
-5. Argo CD detects the values change and syncs the Helm chart to Kubernetes
-6. Argo Rollouts starts a canary deployment (10% → 50% → 100%)
-7. At each step, the AnalysisTemplate polls the Site Reliability Guardian via `dtctl`
-8. Guardian evaluates 3 objectives (availability, latency, burn rate) — **pass** promotes, **fail** aborts
+3. CI runs `dtctl apply` to upsert dashboards, SLOs, and the guardian in Dynatrace
+4. CI runs `dtctl create workflow` to upsert the guardian-validation workflow
+5. CI bumps `deploy/helm/values.yaml` with the new image tag and pushes to master
+6. Argo CD detects the values change and syncs the Helm chart to Kubernetes
+7. Argo Rollouts starts a canary deployment (10% → 50% → 100%)
+8. At each analysis gate, the AnalysisTemplate sends an SDLC bizevent to Dynatrace
+9. The `checkout-release-validation` workflow catches the event and triggers the Guardian evaluation
+10. The AnalysisTemplate polls `dtctl get guardian-run --latest` for the verdict
+11. Guardian evaluates 3 objectives (availability, p95 latency, latency burn rate) — **pass** promotes, **fail** aborts
+12. On abort, Argo Rollouts Notifications auto-creates a GitHub issue for investigation
 
 ## Prerequisite
 The following tools need to be install on your machine :
@@ -122,9 +134,9 @@ The deployment script (`demo-app/deploy.sh`) creates these Kubernetes secrets au
 |---|---|---|---|
 | `dynatrace-otelcol-dt-api-credentials` | `dynatrace` | `DT_ENDPOINT`, `DT_API_TOKEN` | OTel Collector → Dynatrace ingest |
 | `dynakube` | `dynatrace` | operator + data ingest tokens | Dynatrace Operator (K8s monitoring) |
-| `dtctl-oauth` | `otel-demo` | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `DT_ENVIRONMENT` | AnalysisTemplate → dtctl → Guardian |
+| `dtctl-auth` | `otel-demo` | `DT_API_TOKEN`, `DT_ENVIRONMENT` | AnalysisTemplate → dtctl → Guardian |
 
-The `dtctl-oauth` secret is used by the Argo Rollouts AnalysisTemplate to poll the Site Reliability Guardian verdict during canary steps.
+The `dtctl-auth` secret is used by the Argo Rollouts AnalysisTemplate to authenticate with Dynatrace (same API token approach as CI).
 
 ## Getting started
 

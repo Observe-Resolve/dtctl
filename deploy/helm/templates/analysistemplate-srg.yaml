@@ -39,7 +39,7 @@ spec:
                     image: {{ .Values.analysis.dtctlImage }}
                     envFrom:
                       - secretRef:
-                          name: dtctl-oauth
+                          name: dtctl-auth
                     env:
                       - name: APP_VERSION
                         value: {{ "\"{{args.app-version}}\"" }}
@@ -51,24 +51,18 @@ spec:
                         set -euo pipefail
                         GUARDIAN="checkout-release-guardian"
 
-                        # ── 1. Authenticate dtctl ──────────────────────────────
-                        dtctl auth login --oauth-client-id "$OAUTH_CLIENT_ID" \
-                                         --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
-                                         --env "$DT_ENVIRONMENT" >/dev/null
+                        # ── 1. Authenticate dtctl (same pattern as CI) ───────
+                        dtctl config set-credentials default-token --token "$DT_API_TOKEN"
+                        dtctl config set-context default \
+                          --environment "$DT_ENVIRONMENT" \
+                          --token-ref default-token \
+                          --safety-level readwrite-all
+                        dtctl config use-context default
 
-                        # ── 2. Get OAuth bearer token for bizevent API ─────────
-                        TOKEN=$(curl -sf -X POST "${DT_ENVIRONMENT}/sso/oauth2/token" \
-                          -H "Content-Type: application/x-www-form-urlencoded" \
-                          -d "grant_type=client_credentials" \
-                          -d "client_id=${OAUTH_CLIENT_ID}" \
-                          -d "client_secret=${OAUTH_CLIENT_SECRET}" \
-                          -d "scope=storage:events:write" \
-                          | jq -r '.access_token')
-
-                        # ── 3. Send SDLC bizevent → triggers the workflow ──────
+                        # ── 2. Send SDLC bizevent → triggers the workflow ────
                         echo "Sending SDLC bizevent for ${APP_VERSION} at ${CANARY_WEIGHT}% weight..." >&2
                         curl -sf -X POST "${DT_ENVIRONMENT}/api/v2/bizevents/ingest" \
-                          -H "Authorization: Bearer ${TOKEN}" \
+                          -H "Authorization: Api-Token ${DT_API_TOKEN}" \
                           -H "Content-Type: application/json" \
                           -d '{
                             "event.type": "validation.triggered",
@@ -87,7 +81,7 @@ spec:
                         echo "Bizevent sent. Waiting for Guardian evaluation..." >&2
                         sleep {{ .Values.analysis.pollIntervalSec }}
 
-                        # ── 4. Poll for the verdict ────────────────────────────
+                        # ── 3. Poll for the verdict ──────────────────────────
                         for i in $(seq 1 {{ .Values.analysis.pollCount }}); do
                           VERDICT=$(dtctl get guardian-run \
                             --guardian "$GUARDIAN" \
