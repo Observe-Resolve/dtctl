@@ -28,8 +28,6 @@ spec:
       labels:
         app: checkout
         app.version: {{ .Values.appVersion | quote }}
-      annotations:
-        instrumentation.opentelemetry.io/inject-python: "true"
     spec:
       containers:
         - name: checkout
@@ -41,6 +39,14 @@ spec:
           env:
             - name: APP_VERSION
               value: {{ .Values.appVersion | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: "checkout"
+            - name: OTEL_COLLECTOR_NAME
+              value: "otel-collector.default.svc.cluster.local"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(OTEL_COLLECTOR_NAME):4317"
+            - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+              value: "delta"
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: "service.namespace=otel-demo,deployment.environment=ep9-vibe-coded,app.version={{ .Values.appVersion }}"
           resources:
