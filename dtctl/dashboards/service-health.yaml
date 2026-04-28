@@ -1,5 +1,5 @@
 # Service health dashboard for the otel-demo namespace.
-# Long-lived: no version in the name. Use the $version variable to filter by release.
+# Long-lived: no version in the name. Scoped to k8s.cluster.name + k8s.namespace.name.
 name: "otel-demo-service-health"
 type: dashboard
 content:
@@ -11,20 +11,6 @@ content:
       value:
         from: now()-2h
         to: now()
-  variables:
-    - id: version
-      type: query
-      label: "Release version"
-      visible: true
-      defaultValue: "*"
-      multiple: false
-      query: |
-        fetch spans, from:now()-2h
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
-        | filter k8s.namespace.name == "otel-demo"
-        | summarize by:{service.version}
-        | fields version = service.version
-        | sort version desc
   layouts:
     "1":
       x: 0
@@ -34,29 +20,34 @@ content:
     "2":
       x: 0
       "y": 3
-      w: 6
+      w: 12
       h: 4
     "3":
-      x: 0
-      "y": 7
-      w: 12
-      h: 6
-    "4":
       x: 12
+      "y": 3
+      w: 12
+      h: 4
+    "4":
+      x: 0
       "y": 7
       w: 12
       h: 6
     "5":
+      x: 12
+      "y": 7
+      w: 12
+      h: 6
+    "6":
       x: 0
       "y": 13
       w: 12
       h: 5
-    "6":
+    "7":
       x: 12
       "y": 13
       w: 12
       h: 5
-    "7":
+    "8":
       x: 0
       "y": 18
       w: 24
@@ -68,39 +59,53 @@ content:
       content: |
         ### otel-demo · service health
 
-        Use the **Release version** dropdown to filter by a specific release.
-        Every tile filters on `k8s.cluster.name == "observeresolve-ep9-demo"` to isolate telemetry from the demo cluster.
+        All tiles are scoped to `k8s.cluster.name == "observeresolve-ep9-demo"` and the `otel-demo` namespace.
     "2":
-      title: "Active release"
+      title: "Active services"
       type: data
       query: |
         fetch spans, from:now()-5m
         | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | filter k8s.namespace.name == "otel-demo"
-        | summarize count = count(), by:{service.version}
+        | summarize count = count(), by:{service.name}
         | sort count desc
-        | limit 1
-        | fields version = service.version
-      visualization: singleValue
+      visualization: table
       visualizationSettings:
         autoSelectVisualization: false
-        singleValue:
-          showLabel: true
-          label: "Active Release"
-          recordField: version
+        table:
+          linewrapEnabled: true
       davis:
         enabled: false
         davisVisualization:
           isAvailable: true
     "3":
+      title: "Error rate per service (5m)"
+      type: data
+      query: |
+        fetch spans, from:now()-5m
+        | filter k8s.cluster.name == "observeresolve-ep9-demo"
+        | filter k8s.namespace.name == "otel-demo"
+        | summarize total = count(),
+                    errors = countIf(status == "ERROR"),
+                    by:{service.name}
+        | fieldsAdd error_rate = errors * 100.0 / total
+        | sort error_rate desc
+      visualization: table
+      visualizationSettings:
+        autoSelectVisualization: false
+        table:
+          linewrapEnabled: true
+      davis:
+        enabled: false
+        davisVisualization:
+          isAvailable: true
+    "4":
       title: "Request rate per service"
       type: data
       query: |
         fetch spans, from:now()-1h
-        | filter span.kind == "server"
         | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | filter k8s.namespace.name == "otel-demo"
-        | filter $version == "*" OR service.version == $version
         | makeTimeseries req = count(), interval:1m, by:{service.name}
       visualization: lineChart
       visualizationSettings:
@@ -113,14 +118,13 @@ content:
         enabled: false
         davisVisualization:
           isAvailable: true
-    "4":
+    "5":
       title: "p95 latency per service"
       type: data
       query: |
         fetch spans, from:now()-30m
-        | filter span.kind == "server"
         | filter k8s.cluster.name == "observeresolve-ep9-demo"
-        | filter $version == "*" OR service.version == $version
+        | filter k8s.namespace.name == "otel-demo"
         | summarize p95 = percentile(duration, 95) / 1000000, by:{service.name}
         | sort p95 desc
       visualization: barChart
@@ -135,7 +139,7 @@ content:
         enabled: false
         davisVisualization:
           isAvailable: true
-    "5":
+    "6":
       title: "Checkout PlaceOrder count (1h)"
       type: data
       query: |
@@ -143,7 +147,6 @@ content:
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
         | filter k8s.cluster.name == "observeresolve-ep9-demo"
-        | filter $version == "*" OR service.version == $version
         | makeTimeseries orders = count(), interval:5m
       visualization: lineChart
       visualizationSettings:
@@ -152,14 +155,13 @@ content:
         enabled: false
         davisVisualization:
           isAvailable: true
-    "6":
+    "7":
       title: "Checkout error rate (5m)"
       type: data
       query: |
         fetch spans, from:now()-5m
         | filter service.name == "checkout"
         | filter k8s.cluster.name == "observeresolve-ep9-demo"
-        | filter $version == "*" OR service.version == $version
         | summarize err = countIf(status == "ERROR") * 100.0 / count()
       visualization: singleValue
       visualizationSettings:
@@ -196,14 +198,13 @@ content:
         enabled: false
         davisVisualization:
           isAvailable: true
-    "7":
+    "8":
       title: "Checkout errors by exception type"
       type: data
       query: |
         fetch spans, from:now()-1h
         | filter service.name == "checkout" and status == "ERROR"
         | filter k8s.cluster.name == "observeresolve-ep9-demo"
-        | filter $version == "*" OR service.version == $version
         | summarize errors = count(),
                     avg_duration_ms = avg(duration) / 1000000,
                     by:{exception.type, span.name}
