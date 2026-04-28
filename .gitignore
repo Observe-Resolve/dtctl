@@ -13,6 +13,9 @@ dtctl-cache/
 docs/
 cluster-api/
 
+# Teleprompter scripts (kept locally, not for GitHub)
+02_teleprompter_script.*
+
 # OS
 .DS_Store
 Thumbs.db
