@@ -20,7 +20,7 @@ spec:
 
   source:
     repoURL: https://github.com/Observe-Resolve/dtctl
-    targetRevision: main
+    targetRevision: master
     path: deploy/helm
     helm:
       releaseName: otel-demo
