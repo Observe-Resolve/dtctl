@@ -1,5 +1,6 @@
 # Alert workflow triggered when the checkout-availability SLO breaches.
 # Fires in Ep. 09 Act 3 when chaos/break-checkout.sh injects faults.
+id: "87955599-db4e-4bc0-8ced-e69953afc401"
 title: "Checkout SLO Breach Alert"
 description: |
   When checkout-availability SLO drops below target, enrich the alert with
@@ -21,8 +22,7 @@ tasks:
     input:
       query: |
         fetch spans, from:now()-15m
-        | filter service.name == "checkout" and status == "ERROR"
-        | filter k8s.cluster.name == "observeresolve-ep9-demo"
+        | filter service.name == "checkout" and span.status_code == "error"
         | summarize count = count(),
                     by:{exception.type, span.name}
         | sort count desc

@@ -3,6 +3,7 @@
 # PlaceOrder calls as a proxy for end-to-end payment success.
 # Long-lived: no version suffix. Use the dashboard variable to filter by release.
 type: slo
+id: "vu9U3hXa3q0AAAABAClidWlsdGluOmludGVybmFsLnNlcnZpY2UubGV2ZWwub2JqZWN0aXZlcwAGdGVuYW50AAZ0ZW5hbnQAJGE2ZTA1MjkwLWQxOTItM2JmYi1iODliLWM3YzExZDE3MjY0ZL7vVN4V2t6t"
 name: "payment-success"
 enabled: true
 customDescription: "Checkout PlaceOrder success rate over 7 days."

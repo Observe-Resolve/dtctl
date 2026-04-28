@@ -1,6 +1,7 @@
 # Frontend latency SLO — scoped to the demo cluster.
 # Long-lived: no version suffix. Use the dashboard variable to filter by release.
 type: slo
+id: "vu9U3hXa3q0AAAABAClidWlsdGluOmludGVybmFsLnNlcnZpY2UubGV2ZWwub2JqZWN0aXZlcwAGdGVuYW50AAZ0ZW5hbnQAJGFjNjdmNmQwLTZkMWYtMzNiMC1hNzEwLTEyMjIxMmM3OGZlMr7vVN4V2t6t"
 name: "frontend-latency"
 enabled: true
 customDescription: "Frontend server requests served under 200ms."

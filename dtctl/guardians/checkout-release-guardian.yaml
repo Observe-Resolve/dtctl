@@ -5,6 +5,7 @@
 # Long-lived: no version in the name. Same guardian is reused across releases.
 # Dynatrace detects the active version via service.version / app.kubernetes.io/version.
 
+objectId: "vu9U3hXa3q0AAAABADFhcHA6ZHluYXRyYWNlLnNpdGUucmVsaWFiaWxpdHkuZ3VhcmRpYW46Z3VhcmRpYW5zAAZ0ZW5hbnQABnRlbmFudAAkNzY0YmU4YTEtNWFmMy0zZTJiLTlkODYtZjM1OGI3ODIwNjNkvu9U3hXa3q0"
 schemaId: "app:dynatrace.site.reliability.guardian:guardians"
 scope: "environment"
 value:

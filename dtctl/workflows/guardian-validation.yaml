@@ -3,6 +3,7 @@
 # Sends an SDLC event that kicks off the Site Reliability Guardian validation.
 #
 # Long-lived: no version in the name. The guardian is version-agnostic.
+id: "a352521f-bf0d-4768-91bf-3e917a0d68be"
 title: "Checkout Release Guardian Validation"
 description: |
   Triggered by Kubernetes deployment events for the checkout service.

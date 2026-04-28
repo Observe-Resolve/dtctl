@@ -1,6 +1,7 @@
 # Checkout availability SLO — scoped to the demo cluster.
 # Long-lived: no version suffix. Use the dashboard variable to filter by release.
 type: slo
+id: "vu9U3hXa3q0AAAABAClidWlsdGluOmludGVybmFsLnNlcnZpY2UubGV2ZWwub2JqZWN0aXZlcwAGdGVuYW50AAZ0ZW5hbnQAJGVjNzZiNzZhLWQ5ZDYtMzI5Ny1hMjUwLWNkNGJiYjRiZDkyZL7vVN4V2t6t"
 name: "checkout-availability"
 enabled: true
 customDescription: "Successful checkout PlaceOrder ratio over 7 days."
