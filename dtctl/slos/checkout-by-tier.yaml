@@ -1,0 +1,30 @@
+# Checkout success rate by customer tier — measures PlaceOrder success
+# for orders that carry the customer.tier attribute.
+# When scenario 2 renames customer.tier to customerTier, this SLO
+# drops to — (unmeasurable) because no spans match the filter.
+type: slo
+id: "vu9U3hXa3q0AAAABAClidWlsdGluOmludGVybmFsLnNlcnZpY2UubGV2ZWwub2JqZWN0aXZlcwAGdGVuYW50AAZ0ZW5hbnQAJDZhOWZhZDBhLTExYzMtMzY4OS1hMzYyLTRkYzYzMGE0OTcwNL7vVN4V2t6t"
+name: "checkout-by-tier"
+enabled: true
+customDescription: "Checkout PlaceOrder success rate for orders with customer.tier set."
+customSli:
+  indicator: |
+    fetch spans
+    | filter service.name == "checkout"
+    | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+    | filter isNotNull(customer.tier)
+    | summarize total = count(), good = countIf(span.status_code == "error")
+    | fieldsAdd sli = ((asLong(total) - asLong(good)) / asLong(total)) * 100
+criteria:
+  - name: "checkout-by-tier"
+    target: 99.0
+    warning: 99.5
+    comparisonOperator: "GREATER_THAN_OR_EQUAL"
+    timeframeFrom: "now()-7d"
+    timeframeTo: "now()"
+errorBudget:
+  burnRateVisualizationEnabled: true
+  alerting:
+    - severity: page
+      burnRate: 14.4
+      window: "PT1H"
