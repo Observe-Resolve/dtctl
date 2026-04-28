@@ -3,7 +3,6 @@
 
 ## Episode : Dashboards Are Part of Your API
 This repository contains the files utilized during the tutorial presented in the dedicated Observe&Resolve episode showing how to ship Dynatrace observability with your application — semantic conventions in Weaver, dashboards / SLOs / Guardians as YAML applied by `dtctl`, GitOps rollouts via Argo CD + Argo Rollouts, and a Site Reliability Guardian gating every release.
-<p align="center"><img src="/image/dashboard-icon.jpg" width="40%" alt="Dashboards as code" /></p>
 
 This tutorial will utilize:
 * OpenTelemetry Operator with the OpenTelemetry Demo application + a single OTel Collector gateway forwarding traces, metrics and logs to Dynatrace
@@ -217,10 +216,14 @@ Then apply the baseline:
 make baseline
 ```
 
-In Dynatrace, open the **Dashboards** application — you should see the new `otel-demo · service health` dashboard.
-<p align="center"><img src="/image/dashboard.png" width="40%" alt="service health dashboard" /></p>
+In Dynatrace, open the **Dashboards** application — you should see the `otel-demo · service health` dashboard:
+<p align="center"><img src="/image/dashboard.png" width="80%" alt="service health dashboard" /></p>
 
-Open the **Service-Level Objectives** application — three SLOs should appear: `checkout-availability`, `frontend-latency`, `payment-success`.
+Open the **Service-Level Objectives** application — three SLOs should appear: `checkout-availability`, `frontend-latency`, `payment-success`:
+<p align="center"><img src="/image/slo.png" width="80%" alt="SLOs created by dtctl" /></p>
+
+Open the **Site Reliability Guardian** — the `checkout-release-guardian` evaluates three objectives (availability, latency, burn rate) on every release:
+<p align="center"><img src="/image/guardian.png" width="80%" alt="Site Reliability Guardian" /></p>
 
 ## Run the scenarios
 
