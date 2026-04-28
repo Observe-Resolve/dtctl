@@ -9,8 +9,9 @@
 .dtctl/
 dtctl-cache/
 
-# Generated discovery notes
-docs/discovery-*.md
+# Local-only folders (not for GitHub)
+docs/
+cluster-api/
 
 # OS
 .DS_Store
