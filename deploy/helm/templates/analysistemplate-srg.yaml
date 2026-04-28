@@ -31,7 +31,7 @@ spec:
                 serviceAccountName: rollouts-srg-reader
                 containers:
                   - name: dtctl
-                    image: ghcr.io/dynatrace-oss/dtctl:latest
+                    image: {{ .Values.analysis.dtctlImage }}
                     envFrom:
                       - secretRef:
                           name: dtctl-oauth

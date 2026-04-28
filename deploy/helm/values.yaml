@@ -32,6 +32,7 @@ analysis:
   templateName: srg-verdict
   pollIntervalSec: 30
   pollCount: 24        # 30s × 24 = 12-minute ceiling per analysis step
+  dtctlImage: henrikrexed/dtctl:latest  # Container image for running dtctl guardian checks
 
 # Canary strategy. Edit cautiously — the on-camera scenarios assume two
 # analysis gates (10 % then 50 %) before full cutover.
