@@ -28,7 +28,6 @@ graph TD
         Dashboard["Dashboard"]
         SLOs["SLOs (3)"]
         Guardian["Site Reliability<br/>Guardian"]
-        Workflows["Workflows (2)"]
     end
 
     subgraph Kubernetes [Kubernetes — otel-demo namespace]
@@ -41,7 +40,7 @@ graph TD
 
     Repo -- "git tag v*" --> CI
     CI -- "1. Build + push<br/>Docker image" --> GHCR["ghcr.io"]
-    CI -- "2. dtctl apply<br/>dashboards, SLOs,<br/>guardian, workflows" --> Dynatrace
+    CI -- "2. dtctl apply<br/>dashboards, SLOs,<br/>guardian" --> Dynatrace
     CI -- "3. Bump values.yaml<br/>+ git push" --> Repo
 
     Repo -- "watches master" --> ArgoCD
