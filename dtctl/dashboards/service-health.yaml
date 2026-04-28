@@ -50,8 +50,13 @@ content:
       "y": 13
     "8":
       h: 6
-      w: 24
+      w: 12
       x: 0
+      "y": 18
+    "9":
+      h: 6
+      w: 12
+      x: 12
       "y": 18
   tiles:
     "1":
@@ -248,5 +253,28 @@ content:
         autoSelectVisualization: false
         table:
           linewrapEnabled: true
+    "9":
+      davis:
+        davisVisualization:
+          isAvailable: true
+        enabled: false
+      query: |
+        fetch spans, from:now()-1h
+        | filter service.name == "checkout"
+        | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+        | filter isNotNull(customer.tier)
+        | summarize orders = count(), by:{customer.tier}
+        | sort orders desc
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Orders by customer tier (1h)
+      type: data
+      visualization: categoricalBarChart
+      visualizationSettings:
+        autoSelectVisualization: false
   variables: []
-  version: 21
+  version: 22
