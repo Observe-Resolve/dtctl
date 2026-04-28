@@ -59,11 +59,12 @@ groups:
         examples: [129.99]
 
   # ── Span definitions ─────────────────────────────────────────────────────
-  - id: checkout.place_order
+  # Span name follows the gRPC convention: package.Service/Method
+  - id: oteldemo.CheckoutService.PlaceOrder
     type: span
     span_kind: server
     stability: stable
-    brief: "Span emitted when the checkout service places an order."
+    brief: "Span emitted when the checkout service places an order via gRPC."
     attributes:
       - ref: checkout.customer.tier
       - ref: checkout.payment.method

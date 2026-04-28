@@ -20,9 +20,11 @@ python3 - <<PY
 import pathlib, re
 p = pathlib.Path("$TARGET")
 s = p.read_text()
+# In the gRPC checkout, PlaceOrderRequest doesn't carry cart items directly
+# (they come from CartService). We use a stub count for the demo.
 new = re.sub(
     r'(span\.set_attribute\("order\.total_usd",[^\n]+\n)',
-    r'\1        span.set_attribute("checkout.cart.size", len(order.items))\n',
+    r'\1            span.set_attribute("checkout.cart.size", 3)  # stub for demo\n',
     s, count=1
 )
 assert new != s, "anchor not found in main.py — was the file refactored?"
