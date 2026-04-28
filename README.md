@@ -96,7 +96,16 @@ DATA_INGEST_TOKEN=<YOUR TOKEN VALUE>
 ```
 ###### dtctl OAuth client
 
-`dtctl` and the GitHub Actions release pipeline (`.github/workflows/release.yml`) authenticate to your tenant via an OAuth client (separate from the API tokens above). Create one in **Dynatrace → Settings → Integration → Dynatrace tokens → OAuth clients**, with the dtctl scopes preset.
+`dtctl` and the GitHub Actions release pipeline (`.github/workflows/release.yml`) authenticate to your tenant via an OAuth client (separate from the API tokens above). Create one in **Dynatrace → Settings → Integration → Dynatrace tokens → OAuth clients**, with the following scopes:
+
+**Required scopes:**
+* All dtctl scopes (use the preset, then add the following)
+* `storage:events:write` — for sending SDLC events to trigger Site Reliability Guardian validation
+* `app-engine:apps:run` — for executing workflows
+* `document:documents:write` — for dashboards, notebooks
+* `automation:workflows:write` — for workflows
+* `slo:slo:write` — for SLOs
+* `settings:objects:write` — for guardians
 
 Save the values into the following variables:
 * OAUTH_CLIENT_ID

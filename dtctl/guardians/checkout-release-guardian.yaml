@@ -1,89 +1,78 @@
 # Site Reliability Guardian — release gate for checkout.
 # Applied on every release by .github/workflows/release.yml.
-# Evaluates three objectives for 10 minutes against the newly-deployed APP_VERSION.
+# Evaluates three objectives for the newly-deployed APP_VERSION.
 #
-# Verdict:
-#   pass  → release.yml freezes the new Weaver baseline
-#   warn  → logs a comment, no other action
-#   fail  → release.yml runs scripts/rollback.sh
+# Once applied, Dynatrace automatically evaluates the guardian. The Argo Rollouts
+# AnalysisTemplate polls `dtctl get guardian-run` for the verdict.
 
-apiVersion: automation.dynatrace.io/v1
-kind: Guardian
-metadata:
-  name: checkout-release-${APP_VERSION}
-  labels:
-    owner: observe-and-resolve
-    episode: "09"
-    release: ${APP_VERSION}
-    kind: release-gate
-spec:
+schemaId: "app:dynatrace.site.reliability.guardian:guardians"
+scope: "environment"
+value:
+  name: "checkout-release-${APP_VERSION}"
   description: "Post-deploy validation for checkout release ${APP_VERSION}."
-  # Time window starts at apply time. Evaluated every 60s until `evaluationWindow` elapses.
-  evaluationWindow: PT10M
-  evaluationFrequency: PT1M
+  tags:
+    - "owner:observe-and-resolve"
+    - "episode:09"
+    - "release:${APP_VERSION}"
+    - "kind:release-gate"
 
-  # Only consider telemetry stamped with the release we are validating.
-  scope: |
-    app.version == "${APP_VERSION}"
+  variables:
+    - name: "app_version"
+      definition: "${APP_VERSION}"
 
   objectives:
-    - name: checkout-availability
-      description: "Successful checkout.place_order ratio over the evaluation window."
-      query: |
+    - name: "checkout-availability"
+      description: "Successful CheckoutService/PlaceOrder ratio over the evaluation window."
+      objectiveType: "DQL"
+      dqlQuery: |
         fetch spans
         | filter service.name == "checkout"
-        | filter span.name == "checkout.place_order"
-        | filter app.version == "${APP_VERSION}"
+        | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | summarize ok = countIf(status != "ERROR") * 100.0 / count()
-      comparison: greaterThan
+      displayUnit:
+        base: "percent"
+        display: "%"
+        decimals: 2
+      comparisonOperator: "GREATER_THAN_OR_EQUAL"
       target: 99.0
-      warnTarget: 99.5
-      weight: 1
+      warning: 99.5
+      segments: []
+      links: []
 
-    - name: frontend-p95-latency
+    - name: "frontend-p95-latency"
       description: "Frontend p95 latency must stay under 200ms."
-      query: |
+      objectiveType: "DQL"
+      dqlQuery: |
         fetch spans
         | filter service.name == "frontend" and span.kind == "server"
-        | filter app.version == "${APP_VERSION}"
+        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | summarize p95 = percentile(duration, 95) / 1000000
-      comparison: lessThan
-      target: 200         # ms
-      warnTarget: 150
-      weight: 1
+      displayUnit:
+        base: "millisecond"
+        display: "ms"
+        decimals: 1
+      comparisonOperator: "LESS_THAN_OR_EQUAL"
+      target: 200
+      warning: 150
+      segments: []
+      links: []
 
-    - name: error-budget-burn-rate
+    - name: "error-budget-burn-rate"
       description: "Multi-window burn-rate composite (1h fast burn). Fail > 1.0."
-      query: |
+      objectiveType: "DQL"
+      dqlQuery: |
         fetch spans
         | filter service.name == "checkout"
-        | filter app.version == "${APP_VERSION}"
+        | filter k8s.cluster.name == "observeresolve-ep9-demo"
         | summarize
             errors = countIf(status == "ERROR"),
-            total  = count()
-        | fieldsAdd burn = (errors / total) / 0.01     // budget = 1%
-      comparison: lessThan
+            total = count()
+        | fieldsAdd burn = (errors / total) / 0.01
+      comparisonOperator: "LESS_THAN_OR_EQUAL"
       target: 1.0
-      warnTarget: 0.5
-      weight: 2              # double-weighted — this is the dominant signal
+      warning: 0.5
+      segments: []
+      links: []
 
-  onVerdict:
-    pass:
-      - annotateEntity:
-          entityType: service
-          entityName: checkout
-          tags:
-            - "release:${APP_VERSION}:approved"
-    warn:
-      - notifySlack:
-          channel: "#oncall-ep9"
-          message: "Guardian warn on ${APP_VERSION} — review before promoting to stable."
-    fail:
-      - annotateEntity:
-          entityType: service
-          entityName: checkout
-          tags:
-            - "release:${APP_VERSION}:blocked"
-      - notifySlack:
-          channel: "#oncall-ep9"
-          message: ":rotating_light: Guardian blocked release ${APP_VERSION}. Rollback initiated."
+  eventKind: "SDLC_EVENT"

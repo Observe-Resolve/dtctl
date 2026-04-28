@@ -26,11 +26,15 @@ for dir in dashboards slos workflows guardians; do
   done
 done
 
-# CSV lookups aren't templated — echo them at the end as a separator block so
-# `dtctl apply -f -` handles them in the same stream if supported, otherwise
-# scripts can split on the `# +lookup:` marker.
-for csv in "$DTCTL_DIR/lookups"/*.csv; do
-  [[ -e "$csv" ]] || continue
-  printf '\n---\n# +lookup: %s\n' "$(basename "$csv")"
-  cat "$csv"
-done
+# NOTE: CSV lookups are NOT included in this output stream because dtctl apply
+# doesn't support creating lookup tables from embedded CSV data.
+# Lookup tables must be uploaded separately with:
+#   dtctl create lookup -f dtctl/lookups/service-baselines.yaml
+# The CI/release workflows handle this in a separate step before applying manifests.
+#
+# Uncomment the block below if you need to see the CSV content in the rendered output:
+# for csv in "$DTCTL_DIR/lookups"/*.csv; do
+#   [[ -e "$csv" ]] || continue
+#   printf '\n---\n# +lookup: %s\n' "$(basename "$csv")"
+#   cat "$csv"
+# done

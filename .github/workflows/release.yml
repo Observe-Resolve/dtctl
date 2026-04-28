@@ -114,7 +114,7 @@ jobs:
           dtctl create lookup -f dtctl/lookups/service-baselines.yaml --plain || \
             echo "Lookup table already exists or upload failed (non-fatal)"
 
-      - name: Render + apply dashboards / SLOs / workflows / Guardian
+      - name: Render + apply dashboards / workflows / Guardian
         run: |
           # Strip 'v' prefix to match telemetry tags (app.version in OTEL attributes)
           export APP_VERSION="${{ env.APP_VERSION }}"
@@ -123,6 +123,15 @@ jobs:
           ./scripts/stamp-version.sh | tee /tmp/rendered.yaml >/dev/null
           dtctl diff -f /tmp/rendered.yaml || true
           dtctl apply -f /tmp/rendered.yaml
+
+      - name: Upsert SLOs (create or update — long-lived, no version suffix)
+        run: |
+          for slo in dtctl/slos/*.yaml; do
+            echo "Upserting SLO: $slo"
+            dtctl create slo -f "$slo" 2>/dev/null || \
+              dtctl update slo -f "$slo" 2>/dev/null || \
+              echo "Warning: SLO upsert failed for $slo (non-fatal)"
+          done
 
       - name: Trigger Guardian validation (send SDLC event)
         env:

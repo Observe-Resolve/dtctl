@@ -1,35 +1,29 @@
-# Payment success rate SLO — scoped to the release.
-apiVersion: platform.dynatrace.io/v1
-kind: SLO
-metadata:
-  name: payment-success
-  labels:
-    owner: observe-and-resolve
-    episode: "09"
-    release: ${APP_VERSION}
-    service: payment
-spec:
-  description: "Payment service success rate over 7 days for release ${APP_VERSION}."
-  target: 99.9
-  warning: 99.95
-  evaluationWindow: "P7D"
-  sli:
-    type: ratio
-    good: |
-      fetch spans, from:now()-7d
-      | filter service.name == "payment"
-      | filter span.name == "payment.charge"
-      | filter app.version == "${APP_VERSION}"
-      | filter payment.outcome == "success"
-      | summarize count()
-    total: |
-      fetch spans, from:now()-7d
-      | filter service.name == "payment"
-      | filter span.name == "payment.charge"
-      | filter app.version == "${APP_VERSION}"
-      | summarize count()
-  errorBudget:
-    burnRateAlerts:
-      - severity: page
-        burnRate: 14.4
-        window: "PT1H"
+# Payment success rate SLO — scoped to the demo cluster.
+# In otel-demo, payment is part of the checkout flow. We measure successful
+# PlaceOrder calls as a proxy for end-to-end payment success.
+# Long-lived: no version suffix. Use the dashboard variable to filter by release.
+type: slo
+name: "payment-success"
+enabled: true
+customDescription: "Checkout PlaceOrder success rate over 7 days."
+customSli:
+  indicator: |
+    fetch spans
+    | filter service.name == "checkout"
+    | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+    | filter k8s.cluster.name == "observeresolve-ep9-demo"
+    | summarize total = count(), successful = countIf(status != "ERROR")
+    | fieldsAdd sli = (successful / total) * 100
+criteria:
+  - name: "payment-success"
+    target: 99.9
+    warning: 99.95
+    comparisonOperator: "GREATER_THAN_OR_EQUAL"
+    timeframeFrom: "now()-7d"
+    timeframeTo: "now()"
+errorBudget:
+  burnRateVisualizationEnabled: true
+  alerting:
+    - severity: page
+      burnRate: 14.4
+      window: "PT1H"

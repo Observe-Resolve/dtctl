@@ -1,0 +1,19 @@
+{
+  "_comment": "Rename this file to .mcp.json in the repo root so Claude Code picks it up. Kept non-dot here because some file managers hide dotfiles.",
+  "mcpServers": {
+    "dynatrace": {
+      "command": "npx",
+      "args": ["-y", "@dynatrace-oss/dynatrace-mcp-server"],
+      "env": {
+        "DT_ENVIRONMENT": "https://YOUR-ENV-ID.apps.dynatrace.com",
+        "OAUTH_CLIENT_ID": "dt0s02.YOURCLIENT",
+        "OAUTH_CLIENT_SECRET": "dt0s02.YOURCLIENT.SECRET",
+        "OAUTH_URN": "urn:dtaccount:YOUR-ACCOUNT-UUID"
+      }
+    },
+    "kubernetes": {
+      "command": "npx",
+      "args": ["-y", "kubernetes-mcp-server@latest"]
+    }
+  }
+}

@@ -8,7 +8,7 @@ metadata:
 spec:
   mode: daemonset
   serviceAccount: otelcontribcol
-  image: otel/opentelemetry-collector-contrib:0.150.0
+  image: otel/opentelemetry-collector-contrib:0.149.0
   ports:
     - name: prometheus
       port: 9090
@@ -199,8 +199,8 @@ spec:
       resource:
         attributes:
           - key: k8s.cluster.name
-            value: CLUSTER_NAME_TO_REPLACE
-            action: insert
+            value: observeresolve-ep9-demo
+            action: upsert
 
       transform:
         error_mode: ignore

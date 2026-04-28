@@ -1,24 +1,20 @@
-# Frontend p95 latency SLO — scoped to the release.
-apiVersion: platform.dynatrace.io/v1
-kind: SLO
-metadata:
-  name: frontend-p95-latency
-  labels:
-    owner: observe-and-resolve
-    episode: "09"
-    release: ${APP_VERSION}
-    service: frontend
-spec:
-  description: "Frontend p95 request latency stays under 200ms for release ${APP_VERSION}."
-  target: 95.0
-  warning: 98.0
-  evaluationWindow: "P7D"
-  sli:
-    type: threshold
-    metric: |
-      fetch spans, from:now()-7d
-      | filter service.name == "frontend" and span.kind == "server"
-      | filter app.version == "${APP_VERSION}"
-      | summarize p95 = percentile(duration, 95), by: {bin(timestamp, 1m)}
-    comparison: lessThan
-    thresholdMillis: 200
+# Frontend latency SLO — scoped to the demo cluster.
+# Long-lived: no version suffix. Use the dashboard variable to filter by release.
+type: slo
+name: "frontend-latency"
+enabled: true
+customDescription: "Frontend server requests served under 200ms."
+customSli:
+  indicator: |
+    fetch spans
+    | filter service.name == "frontend" and span.kind == "server"
+    | filter k8s.cluster.name == "observeresolve-ep9-demo"
+    | summarize total = count(), fast = countIf(duration / 1000000 < 200)
+    | fieldsAdd sli = (fast / total) * 100
+criteria:
+  - name: "frontend-latency"
+    target: 95.0
+    warning: 98.0
+    comparisonOperator: "GREATER_THAN_OR_EQUAL"
+    timeframeFrom: "now()-7d"
+    timeframeTo: "now()"

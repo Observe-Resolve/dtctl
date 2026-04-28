@@ -1,38 +1,30 @@
-# Checkout availability SLO — scoped to the release.
-apiVersion: platform.dynatrace.io/v1
-kind: SLO
-metadata:
-  name: checkout-availability
-  labels:
-    owner: observe-and-resolve
-    episode: "09"
-    release: ${APP_VERSION}
-    service: checkout
-spec:
-  description: "Successful checkout.place_order ratio over 7 days, scoped to release ${APP_VERSION}."
-  target: 99.0
-  warning: 99.5
-  evaluationWindow: "P7D"
-  sli:
-    type: ratio
-    good: |
-      fetch spans, from:now()-7d
-      | filter service.name == "checkout"
-      | filter span.name == "checkout.place_order"
-      | filter app.version == "${APP_VERSION}"
-      | filter status != "ERROR"
-      | summarize count()
-    total: |
-      fetch spans, from:now()-7d
-      | filter service.name == "checkout"
-      | filter span.name == "checkout.place_order"
-      | filter app.version == "${APP_VERSION}"
-      | summarize count()
-  errorBudget:
-    burnRateAlerts:
-      - severity: page
-        burnRate: 14.4
-        window: "PT1H"
-      - severity: ticket
-        burnRate: 6
-        window: "PT6H"
+# Checkout availability SLO — scoped to the demo cluster.
+# Long-lived: no version suffix. Use the dashboard variable to filter by release.
+type: slo
+name: "checkout-availability"
+enabled: true
+customDescription: "Successful checkout PlaceOrder ratio over 7 days."
+customSli:
+  indicator: |
+    fetch spans
+    | filter service.name == "checkout"
+    | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+    | filter k8s.cluster.name == "observeresolve-ep9-demo"
+    | summarize total = count(), good = countIf(status != "ERROR")
+    | fieldsAdd sli = (good / total) * 100
+criteria:
+  - name: "checkout-availability"
+    target: 99.0
+    warning: 99.5
+    comparisonOperator: "GREATER_THAN_OR_EQUAL"
+    timeframeFrom: "now()-7d"
+    timeframeTo: "now()"
+errorBudget:
+  burnRateVisualizationEnabled: true
+  alerting:
+    - severity: page
+      burnRate: 14.4
+      window: "PT1H"
+    - severity: ticket
+      burnRate: 6
+      window: "PT6H"

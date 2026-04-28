@@ -1,0 +1,30 @@
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+.mcp.json
+
+# dtctl local state
+.dtctl/
+dtctl-cache/
+
+# Generated discovery notes
+docs/discovery-*.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Kube
+kubeconfig
+.kube/
+
+# Helm
+charts/**/charts/
+*.tgz
