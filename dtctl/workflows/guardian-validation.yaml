@@ -1,0 +1,63 @@
+# Workflow: triggers checkout-release-guardian on SDLC deployment events.
+#
+# The Argo Rollouts AnalysisTemplate sends a bizevent when the canary
+# reaches an analysis gate. This workflow catches that event and runs
+# the Site Reliability Guardian evaluation over the specified timeframe.
+# The AnalysisTemplate then polls `dtctl get guardian-run --latest`
+# for the verdict.
+#
+# Applied with: dtctl apply -f dtctl/workflows/guardian-validation.yaml
+
+metadata:
+  version: "1"
+  dependencies:
+    apps:
+      - id: dynatrace.automations
+        version: "^1.840.0"
+      - id: dynatrace.site.reliability.guardian
+        version: "^1.0.0"
+  inputs: []
+
+workflow:
+  title: "checkout-release-validation"
+  description: >-
+    Post-deploy validation workflow. Listens for SDLC bizevents sent by the
+    Argo Rollouts AnalysisTemplate and triggers the checkout-release-guardian.
+    The evaluation timeframe comes from the event, defaulting to the last 10
+    minutes. Version is propagated via execution_context so guardian results
+    can be filtered by release.
+  tasks:
+    run_validation:
+      name: run_validation
+      description: "Trigger checkout-release-guardian evaluation."
+      action: "dynatrace.site.reliability.guardian:validate-guardian-action"
+      input:
+        executionId: "{{ execution().id }}"
+        objectId: "vu9U3hXa3q0AAAABADFhcHA6ZHluYXRyYWNlLnNpdGUucmVsaWFiaWxpdHkuZ3VhcmRpYW46Z3VhcmRpYW5zAAZ0ZW5hbnQABnRlbmFudAAkNzY0YmU4YTEtNWFmMy0zZTJiLTlkODYtZjM1OGI3ODIwNjNkvu9U3hXa3q0"
+        timeframeInputType: "expression"
+        timeframeSelector:
+          from: "{{ event()['timeframe.from'] | default('now-10m') }}"
+          to: "{{ event()['timeframe.to'] | default('now') }}"
+      position:
+        x: 0
+        y: 1
+      predecessors: []
+
+  trigger:
+    eventTrigger:
+      filterQuery: |-
+        event.type == "validation.triggered"
+        AND event.kind == "SDLC_EVENT"
+        AND application == "checkout"
+      isActive: true
+      uniqueExpression: null
+      triggerConfiguration:
+        type: event
+        value:
+          eventType: bizevents
+          query: |-
+            event.type == "validation.triggered"
+            AND event.kind == "SDLC_EVENT"
+            AND application == "checkout"
+
+  schemaVersion: 3

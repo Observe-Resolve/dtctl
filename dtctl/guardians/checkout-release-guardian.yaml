@@ -36,12 +36,13 @@ value:
       segments: []
       links: []
 
-    - name: "frontend-p95-latency"
-      description: "Frontend p95 latency must stay under 200ms."
+    - name: "checkout-p95-latency"
+      description: "Checkout PlaceOrder p95 latency must stay under 200ms."
       objectiveType: "DQL"
       dqlQuery: |
         fetch spans
-        | filter service.name == "frontend" and span.kind == "server"
+        | filter service.name == "checkout"
+        | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
         | summarize p95 = percentile(duration, 95) / 1000000
       displayUnit:
         base: "millisecond"
@@ -53,16 +54,17 @@ value:
       segments: []
       links: []
 
-    - name: "error-budget-burn-rate"
-      description: "Multi-window burn-rate composite (1h fast burn). Fail > 1.0."
+    - name: "checkout-latency-burn"
+      description: "Fraction of checkout requests exceeding 200ms latency budget. Burn > 1.0 means the budget is consumed faster than allowed (5% budget)."
       objectiveType: "DQL"
       dqlQuery: |
         fetch spans
         | filter service.name == "checkout"
+        | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
         | summarize
-            errors = countIf(span.status_code == "error"),
+            slow = countIf(duration / 1000000 > 200),
             total = count()
-        | fieldsAdd burn = (asLong(errors) / asLong(total)) / 0.01
+        | fieldsAdd burn = (asDouble(slow) / asDouble(total)) / 0.05
       comparisonOperator: "LESS_THAN_OR_EQUAL"
       target: 1.0
       warning: 0.5

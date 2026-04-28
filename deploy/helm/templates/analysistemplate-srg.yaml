@@ -1,6 +1,11 @@
 # AnalysisTemplate — "Is the Site Reliability Guardian happy with this canary?"
-# Polls dtctl get guardian-run for the verdict; pass → promote, fail → abort.
-# Templated from values.yaml so the polling cadence is configurable per env.
+#
+# Single Job that:
+#   1. Sends an SDLC bizevent to Dynatrace to trigger the guardian-validation workflow
+#   2. Polls `dtctl get guardian-run` until the verdict is ready (pass/fail)
+#
+# The Dynatrace workflow receives the bizevent, runs the Site Reliability
+# Guardian evaluation, and writes the verdict. This Job reads it back.
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
@@ -15,8 +20,7 @@ spec:
 
   metrics:
     - name: srg-pass
-      interval: {{ .Values.analysis.pollIntervalSec }}s
-      count: {{ .Values.analysis.pollCount }}
+      count: 1
 
       successCondition: "result == \"pass\""
       failureCondition: "result == \"fail\""
@@ -25,6 +29,7 @@ spec:
         job:
           spec:
             backoffLimit: 1
+            activeDeadlineSeconds: {{ mul .Values.analysis.pollIntervalSec .Values.analysis.pollCount }}
             template:
               spec:
                 restartPolicy: Never
@@ -35,17 +40,71 @@ spec:
                     envFrom:
                       - secretRef:
                           name: dtctl-oauth
+                    env:
+                      - name: APP_VERSION
+                        value: {{ "\"{{args.app-version}}\"" }}
+                      - name: CANARY_WEIGHT
+                        value: {{ "\"{{args.canary-weight}}\"" }}
                     command: ["/bin/sh", "-c"]
                     args:
                       - |
                         set -euo pipefail
                         GUARDIAN="checkout-release-guardian"
+
+                        # ── 1. Authenticate dtctl ──────────────────────────────
                         dtctl auth login --oauth-client-id "$OAUTH_CLIENT_ID" \
                                          --oauth-client-secret "$OAUTH_CLIENT_SECRET" \
                                          --env "$DT_ENVIRONMENT" >/dev/null
 
-                        dtctl get guardian-run \
-                              --guardian "$GUARDIAN" \
-                              --latest \
-                              --output=json \
-                          | jq -r '.verdict'
+                        # ── 2. Get OAuth bearer token for bizevent API ─────────
+                        TOKEN=$(curl -sf -X POST "${DT_ENVIRONMENT}/sso/oauth2/token" \
+                          -H "Content-Type: application/x-www-form-urlencoded" \
+                          -d "grant_type=client_credentials" \
+                          -d "client_id=${OAUTH_CLIENT_ID}" \
+                          -d "client_secret=${OAUTH_CLIENT_SECRET}" \
+                          -d "scope=storage:events:write" \
+                          | jq -r '.access_token')
+
+                        # ── 3. Send SDLC bizevent → triggers the workflow ──────
+                        echo "Sending SDLC bizevent for ${APP_VERSION} at ${CANARY_WEIGHT}% weight..." >&2
+                        curl -sf -X POST "${DT_ENVIRONMENT}/api/v2/bizevents/ingest" \
+                          -H "Authorization: Bearer ${TOKEN}" \
+                          -H "Content-Type: application/json" \
+                          -d '{
+                            "event.type": "validation.triggered",
+                            "event.kind": "SDLC_EVENT",
+                            "application": "checkout",
+                            "version": "'"${APP_VERSION}"'",
+                            "timeframe.from": "now-10m",
+                            "timeframe.to": "now",
+                            "execution_context": {
+                              "version": "'"${APP_VERSION}"'",
+                              "stage": "canary-'"${CANARY_WEIGHT}"'",
+                              "application": "checkout"
+                            }
+                          }' >&2
+
+                        echo "Bizevent sent. Waiting for Guardian evaluation..." >&2
+                        sleep {{ .Values.analysis.pollIntervalSec }}
+
+                        # ── 4. Poll for the verdict ────────────────────────────
+                        for i in $(seq 1 {{ .Values.analysis.pollCount }}); do
+                          VERDICT=$(dtctl get guardian-run \
+                            --guardian "$GUARDIAN" \
+                            --latest \
+                            --output=json 2>/dev/null \
+                            | jq -r '.verdict // empty' || true)
+
+                          if [ "$VERDICT" = "pass" ] || [ "$VERDICT" = "fail" ]; then
+                            echo "Guardian verdict: ${VERDICT}" >&2
+                            echo "$VERDICT"
+                            exit 0
+                          fi
+
+                          echo "Poll ${i}/{{ .Values.analysis.pollCount }}: verdict=${VERDICT:-pending}" >&2
+                          sleep {{ .Values.analysis.pollIntervalSec }}
+                        done
+
+                        # Timeout — treat as failure
+                        echo "Guardian evaluation timed out" >&2
+                        echo "fail"

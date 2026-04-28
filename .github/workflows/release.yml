@@ -12,10 +12,9 @@
 #   - Pass: canary promotes to 100%
 #   - Fail: AnalysisRun trips, Rollouts aborts the canary, traffic stays on the previous tag
 #
-# Watch the rollout in the Argo Rollouts UI. To roll back the dtctl manifests
-# after an aborted release, run `make rollback TAG=<previous-tag>` locally —
-# that re-stamps dashboards/SLOs/Guardian to whatever version is actually
-# serving traffic.
+# Watch the rollout in the Argo Rollouts UI. Dashboards and SLOs are
+# version-agnostic so an aborted canary requires no dtctl cleanup —
+# Argo simply drains the canary pods.
 name: Release
 
 on:
@@ -133,32 +132,10 @@ jobs:
               echo "Warning: SLO upsert failed for $slo (non-fatal)"
           done
 
-      - name: Trigger Guardian validation (send SDLC event)
-        env:
-          DT_ENVIRONMENT: ${{ secrets.DT_ENVIRONMENT }}
-          DT_API_TOKEN: ${{ secrets.DT_API_TOKEN }}
-        run: |
-          # Strip 'v' prefix for telemetry tags
-          APP_VERSION="${{ env.APP_VERSION }}"
-          APP_VERSION="${APP_VERSION#v}"
-
-          # Send SDLC deployment event to trigger guardian evaluation
-          # Guardian is long-lived (checkout-release-guardian), no version in name.
-          curl -X POST "https://${DT_ENVIRONMENT}/api/v2/events/ingest" \
-            -H "Authorization: Api-Token ${DT_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "eventType": "CUSTOM_DEPLOYMENT",
-              "title": "Checkout '"${APP_VERSION}"' deployment",
-              "entitySelector": "type(SERVICE),entityName.equals(\"checkout\")",
-              "properties": {
-                "dt.event.deployment": "true",
-                "dt.event.deployment.name": "checkout",
-                "dt.event.deployment.version": "'"${APP_VERSION}"'",
-                "dt.event.deployment.release_stage": "production",
-                "guardian.name": "checkout-release-guardian"
-              }
-            }' || echo "Warning: SDLC event send failed (non-fatal)"
+      # NOTE: The SDLC bizevent that triggers the Guardian evaluation is sent
+      # by the Argo Rollouts AnalysisTemplate — NOT here. This ensures the
+      # Guardian evaluates canary traffic that is actually flowing, not stale
+      # pre-deploy data. See deploy/helm/templates/analysistemplate-srg.yaml.
 
   ##############################################################################
   # 3. Bump deploy/helm/values.yaml — Argo CD reconciles from here
