@@ -166,6 +166,23 @@ kubectl -n argo-rollouts wait pod --for=condition=ready --selector=app.kubernete
 find deploy/rollouts/ -name "analysistemplate-srg.yaml" -exec sed -i '' "s,CLUSTER_NAME_TO_REPLACE,$CLUSTERNAME," {} +
 kubectl apply -f deploy/rollouts/analysistemplate-srg.yaml
 
+# Notification config — creates a GitHub issue when a canary is aborted.
+# Requires `gh` CLI to be authenticated (`gh auth status`).
+echo "Configuring Argo Rollouts notifications (GitHub issue on canary abort)"
+GITHUB_REPO=$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null || echo "")
+if [ -n "$GITHUB_REPO" ]; then
+  GITHUB_TOKEN=$(gh auth token)
+  kubectl -n argo-rollouts create secret generic argo-rollouts-notification-secret \
+    --from-literal=github-token="$GITHUB_TOKEN" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  sed "s,GITHUB_REPO_TO_REPLACE,$GITHUB_REPO," deploy/notifications/configmap.yaml \
+    | kubectl apply -f -
+  echo "  Notifications configured for repo: $GITHUB_REPO"
+else
+  echo "  Warning: gh CLI not authenticated — skipping notification setup."
+  echo "  Run 'gh auth login' and re-run to enable GitHub issue creation on canary abort."
+fi
+
 
 #### Deploy otel-demo-light (the app being measured)
 echo "Deploying otel-demo-light"

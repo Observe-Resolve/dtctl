@@ -1,0 +1,36 @@
+# Argo Rollouts notification config — creates a GitHub issue when a canary is aborted.
+#
+# Applied by deploy.sh into the argo-rollouts namespace.
+# The Rollout in deploy/helm/templates/rollout.yaml subscribes to the
+# on-rollout-aborted trigger via an annotation.
+#
+# Requires a Secret named "argo-rollouts-notification-secret" in argo-rollouts
+# namespace with key "github-token" (deploy.sh creates this from `gh auth token`).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argo-rollouts-notification-configmap
+  namespace: argo-rollouts
+data:
+  # ── Webhook service: GitHub Issues API ──────────────────────────────
+  service.webhook.github-issues: |
+    url: https://api.github.com/repos/GITHUB_REPO_TO_REPLACE/issues
+    headers:
+      - name: Authorization
+        value: token $github-token
+      - name: Accept
+        value: application/vnd.github+json
+      - name: Content-Type
+        value: application/json
+
+  # ── Template: what the issue looks like ─────────────────────────────
+  template.rollout-aborted: |
+    webhook:
+      github-issues:
+        method: POST
+        body: |
+          {"title":"Release {{index .rollout.spec.template.metadata.labels \"app.kubernetes.io/version\"}} blocked by Site Reliability Guardian","body":"### Canary aborted\n\n| Field | Value |\n|---|---|\n| Service | {{.rollout.metadata.name}} |\n| Version | {{index .rollout.spec.template.metadata.labels \"app.kubernetes.io/version\"}} |\n| Namespace | {{.rollout.metadata.namespace}} |\n| Phase | {{.rollout.status.phase}} |\n\n#### Guardian objectives\n\n- **checkout-availability** (≥ 99.0%) — error rate\n- **checkout-p95-latency** (≤ 200ms) — PlaceOrder p95\n- **checkout-latency-burn** (≤ 1.0) — latency budget burn rate\n\n#### Next steps\n\n1. Open the **Site Reliability Guardian** in Dynatrace → search for `checkout-release-guardian` → inspect the latest evaluation\n2. Check the AnalysisRun: `kubectl -n otel-demo get analysisrun --sort-by=.metadata.creationTimestamp`\n3. Investigate the regression in the failing version\n4. Fix and re-release with a new tag\n\n---\n*Auto-created by Argo Rollouts notification on canary abort.*","labels":["release-blocked","needs-investigation"]}
+
+  # ── Trigger: when to fire ───────────────────────────────────────────
+  trigger.on-rollout-aborted: |
+    - send: [rollout-aborted]

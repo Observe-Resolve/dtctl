@@ -15,6 +15,10 @@ metadata:
   namespace: otel-demo
   labels:
     {{- include "checkout.labels" . | nindent 4 }}
+  annotations:
+    # On canary abort, create a GitHub issue via the notification controller.
+    # Config: deploy/notifications/configmap.yaml
+    notifications.argoproj.io/subscribe.on-rollout-aborted.github-issues: ""
 spec:
   replicas: {{ .Values.replicas }}
   revisionHistoryLimit: 5
