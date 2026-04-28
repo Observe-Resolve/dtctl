@@ -17,52 +17,41 @@ This tutorial will utilize:
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                              GitHub                                      │
-│                                                                          │
-│  ┌─────────────┐    git tag v*    ┌──────────────────────────────────┐   │
-│  │  Repository  │ ───────────────►│  Release Workflow (CI)            │   │
-│  │  (master)    │                 │                                    │   │
-│  │              │  pull request   │  1. Build checkout Docker image    │   │
-│  │  dtctl/      │ ───────────────►│     → push to ghcr.io             │   │
-│  │  deploy/     │  CI Workflow    │  2. dtctl apply                    │   │
-│  │  weaver/     │  (lint+test)    │     → dashboards, SLOs, guardian  │   │
-│  └──────┬───────┘                 │     → workflows to Dynatrace      │   │
-│         │                         │  3. Bump values.yaml image.tag    │   │
-│         │                         │     → git push to master          │   │
-│         │                         └──────────────┬───────────────────┘   │
-└─────────┼────────────────────────────────────────┼───────────────────────┘
-          │                                        │
-          │  watches master                        │  dtctl apply
-          ▼                                        ▼
-┌──────────────────┐                    ┌─────────────────────┐
-│  Argo CD          │                    │  Dynatrace           │
-│                    │                    │                      │
-│  Syncs deploy/     │                    │  • Dashboard         │
-│  helm/ chart to    │                    │  • SLOs (3)          │
-│  Kubernetes        │                    │  • Guardian          │
-└────────┬───────────┘                    │  • Workflows (2)     │
-         │                                │                      │
-         │  creates / updates             │  SDLC event          │
-         ▼                                │  triggers guardian   │
-┌──────────────────────────────────┐      │  evaluation          │
-│  Kubernetes (otel-demo namespace) │      └──────────┬──────────┘
-│                                    │                 │
-│  ┌─────────────────────────────┐   │                 │
-│  │  Argo Rollouts               │   │    verdict      │
-│  │  checkout Rollout            │◄──┼─────────────────┘
-│  │                               │   │  pass → promote canary
-│  │  canary 10% → 50% → 100%    │   │  fail → abort rollout
-│  │  AnalysisTemplate polls SRG  │   │
-│  └─────────────────────────────┘   │
-│                                    │
-│  ┌──────────────┐  OTLP  ┌──────┐ │
-│  │  otel-demo    │ ──────►│ OTel │ │──── OTLP/gRPC ────► Dynatrace
-│  │  services     │        │Collec│ │
-│  └──────────────┘        │ tor  │ │
-│                           └──────┘ │
-└────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph GitHub
+        Repo["Repository<br/>(master)"]
+        CI["Release Workflow"]
+    end
+
+    subgraph Dynatrace
+        Dashboard["Dashboard"]
+        SLOs["SLOs (3)"]
+        Guardian["Site Reliability<br/>Guardian"]
+        Workflows["Workflows (2)"]
+    end
+
+    subgraph Kubernetes [Kubernetes — otel-demo namespace]
+        ArgoCD["Argo CD"]
+        Rollouts["Argo Rollouts<br/>canary 10% → 50% → 100%"]
+        Analysis["AnalysisTemplate<br/>(polls SRG via dtctl)"]
+        OtelDemo["otel-demo<br/>services"]
+        Collector["OTel Collector"]
+    end
+
+    Repo -- "git tag v*" --> CI
+    CI -- "1. Build + push<br/>Docker image" --> GHCR["ghcr.io"]
+    CI -- "2. dtctl apply<br/>dashboards, SLOs,<br/>guardian, workflows" --> Dynatrace
+    CI -- "3. Bump values.yaml<br/>+ git push" --> Repo
+
+    Repo -- "watches master" --> ArgoCD
+    ArgoCD -- "syncs Helm chart" --> Rollouts
+    Rollouts --> Analysis
+    Analysis -- "dtctl get<br/>guardian-run" --> Guardian
+    Guardian -- "pass → promote<br/>fail → abort" --> Rollouts
+
+    OtelDemo -- "OTLP/gRPC" --> Collector
+    Collector -- "traces, metrics, logs" --> Dynatrace
 ```
 
 **Release flow:**
@@ -265,34 +254,6 @@ Then use the three Beat-aligned prompts during recording:
 * `prompts/scenario-3-stage-regression.md` — Beat 3, staging the deliberate regression for the SRG demo
 
 Each prompt file is both the rehearsal doc you read in advance and the paste-source the `claude code --prompt "$(cat ...)"` shell line extracts — one source of truth.
-
-## Repository structure
-
-```
-.
-├── .github/workflows/
-│   ├── ci.yml                  # PR gate: Weaver + dtctl + Helm + checkout tests
-│   └── release.yml             # Release: build → dtctl apply → Argo bump
-├── demo-app/
-│   ├── deploy.sh               # One-shot cluster bootstrap script
-│   └── services/checkout/      # gRPC checkout service (Python + OTel)
-├── deploy/helm/
-│   ├── templates/              # Rollout, AnalysisTemplate, Services
-│   └── values.yaml             # Image tag + Argo Rollouts config
-├── dtctl/
-│   ├── dashboards/             # service-health.yaml
-│   ├── slos/                   # checkout-availability, frontend-latency, payment-success
-│   ├── guardians/              # checkout-release-guardian
-│   ├── workflows/              # checkout-alert, guardian-validation
-│   └── lookups/                # service-baselines (CSV)
-├── prompts/                    # Claude Code scenario prompts
-├── scripts/
-│   ├── stamp-version.sh        # envsubst renderer for dtctl manifests
-│   └── rollback.sh             # Argo Rollouts undo helper
-└── weaver/
-    ├── registry/               # Semantic convention definitions
-    └── baselines/              # Frozen baseline for diff checks
-```
 
 ## Watch the episode
 
