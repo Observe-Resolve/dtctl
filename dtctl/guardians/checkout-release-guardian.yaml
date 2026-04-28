@@ -24,7 +24,8 @@ value:
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
         | filter k8s.cluster.name == "observeresolve-ep9-demo"
-        | summarize ok = countIf(status != "ERROR") * 100.0 / count()
+        | summarize total = count(), errors = countIf(status == "ERROR")
+        | fieldsAdd ok = ((total - errors) / total) * 100.0
       displayUnit:
         base: "percent"
         display: "%"

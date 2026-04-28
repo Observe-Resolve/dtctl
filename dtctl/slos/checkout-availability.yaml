@@ -10,8 +10,8 @@ customSli:
     | filter service.name == "checkout"
     | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
     | filter k8s.cluster.name == "observeresolve-ep9-demo"
-    | summarize total = count(), good = countIf(status != "ERROR")
-    | fieldsAdd sli = (good / total) * 100
+    | summarize total = count(), errors = countIf(status == "ERROR")
+    | fieldsAdd sli = ((total - errors) / total) * 100
 criteria:
   - name: "checkout-availability"
     target: 99.0
