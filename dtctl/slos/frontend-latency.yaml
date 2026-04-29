@@ -10,7 +10,7 @@ customSli:
     fetch spans
     | filter service.name == "frontend" and span.kind == "server"
     | summarize total = count(), fast = countIf(duration / 1000000 < 200)
-    | fieldsAdd sli = (asLong(fast) / asLong(total)) * 100
+    | fieldsAdd sli = (toDouble(fast) / toDouble(total)) * 100
 criteria:
   - name: "frontend-latency"
     target: 95.0

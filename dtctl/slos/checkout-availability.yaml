@@ -11,7 +11,7 @@ customSli:
     | filter service.name == "checkout"
     | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
     | summarize total = count(), good = countIf(span.status_code == "error")
-    | fieldsAdd sli = ((asLong(total) - asLong(good)) / asLong(total)) * 100
+    | fieldsAdd sli = ((toDouble(total) - toDouble(good)) / toDouble(total)) * 100
 criteria:
   - name: "checkout-availability"
     target: 99.0

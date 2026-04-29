@@ -25,7 +25,7 @@ value:
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
         | summarize total = count(), good = countIf(span.status_code == "error")
-        | fieldsAdd ok = ((asLong(total) - asLong(good)) / asLong(total)) * 100.0
+        | fieldsAdd ok = ((toDouble(total) - toDouble(good)) / toDouble(total)) * 100.0
       displayUnit:
         base: "percent"
         display: "%"
