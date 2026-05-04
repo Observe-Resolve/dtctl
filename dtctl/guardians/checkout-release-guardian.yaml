@@ -74,4 +74,8 @@ value:
       segments: []
       links: []
 
+  variables:
+    - name: "app_version"
+      definition: "latest"
+
   eventKind: "SDLC_EVENT"
