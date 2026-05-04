@@ -126,10 +126,22 @@ jobs:
       - name: Upsert workflow (dtctl apply does not support workflows)
         run: |
           for wf in dtctl/workflows/*.yaml; do
-            echo "Upserting workflow: $wf"
-            dtctl create workflow -f "$wf" 2>/dev/null || \
-              dtctl update workflow -f "$wf" 2>/dev/null || \
-              echo "Warning: workflow upsert failed for $wf (non-fatal)"
+            # Extract workflow title from YAML to find existing instance
+            WF_TITLE=$(grep '^title:' "$wf" | sed 's/^title: *"\?\([^"]*\)"\?/\1/')
+            echo "Upserting workflow: $WF_TITLE ($wf)"
+
+            # Find existing workflow by title and delete it to avoid duplicates
+            EXISTING_ID=$(dtctl get workflows -o json 2>/dev/null \
+              | jq -r ".[] | select(.title == \"${WF_TITLE}\") | .id" 2>/dev/null | head -1 || true)
+
+            if [ -n "$EXISTING_ID" ]; then
+              echo "  Deleting existing workflow $EXISTING_ID"
+              dtctl delete workflow "$EXISTING_ID" 2>/dev/null || true
+            fi
+
+            echo "  Creating workflow from $wf"
+            dtctl create workflow -f "$wf" || \
+              echo "Warning: workflow create failed for $wf (non-fatal)"
           done
 
       - name: Upsert SLOs (create or update — long-lived, no version suffix)

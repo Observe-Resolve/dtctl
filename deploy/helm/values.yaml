@@ -33,7 +33,7 @@ analysis:
   pollIntervalSec: 30
   pollCount: 24        # 30s × 24 = 12-minute ceiling per analysis step
   dtctlImage: hrexed/dtctl:latest  # Container image for running dtctl guardian checks
-  workflowId: "1f2da7a0-c532-4c15-a9a0-10fda1c05277"  # checkout-release-validation workflow
+  workflowId: "24af7bd9-409d-4f82-9e6b-f2cfd4a9ac62"  # checkout-release-validation workflow
 
 # Canary strategy. Edit cautiously — the on-camera scenarios assume two
 # analysis gates (10 % then 50 %) before full cutover.
