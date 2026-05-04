@@ -1,6 +1,6 @@
 # Workflow: triggers checkout-release-guardian on SDLC deployment events.
 #
-# The Argo Rollouts AnalysisTemplate sends a bizevent when the canary
+# The Argo Rollouts AnalysisTemplate sends an SDLC event when the canary
 # reaches an analysis gate. This workflow catches that event and runs
 # the Site Reliability Guardian evaluation over the specified timeframe.
 # The AnalysisTemplate then polls `dtctl get guardian-run --latest`
@@ -12,7 +12,7 @@
 title: "checkout-release-validation"
 isPrivate: false
 description: >-
-  Post-deploy validation workflow. Listens for SDLC bizevents sent by the
+  Post-deploy validation workflow. Listens for SDLC events sent by the
   Argo Rollouts AnalysisTemplate and triggers the checkout-release-guardian.
   The evaluation timeframe comes from the event, defaulting to the last 10
   minutes. Version is propagated via execution_context so guardian results
@@ -44,7 +44,7 @@ trigger:
     triggerConfiguration:
       type: event
       value:
-        eventType: bizevents
+        eventType: events
         query: |-
           event.type == "validation.triggered"
           AND event.kind == "SDLC_EVENT"
