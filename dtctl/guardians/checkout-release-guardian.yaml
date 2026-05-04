@@ -24,6 +24,7 @@ value:
         fetch spans
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+        | filter app.version == "{{app_version}}"
         | summarize total = count(), good = countIf(span.status_code == "error")
         | fieldsAdd ok = ((toDouble(total) - toDouble(good)) / toDouble(total)) * 100.0
       displayUnit:
@@ -43,6 +44,7 @@ value:
         fetch spans
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+        | filter app.version == "{{app_version}}"
         | summarize p95 = percentile(duration, 95) / 1000000
       displayUnit:
         base: "millisecond"
@@ -61,6 +63,7 @@ value:
         fetch spans
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+        | filter app.version == "{{app_version}}"
         | summarize
             slow = countIf(duration / 1000000 > 200),
             total = count()

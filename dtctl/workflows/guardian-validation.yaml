@@ -29,6 +29,9 @@ tasks:
       timeframeSelector:
         from: "{{ event()['timeframe.from'] | default('now-10m') }}"
         to: "{{ event()['timeframe.to'] | default('now') }}"
+      variables:
+        - name: app_version
+          definition: "{{ event()['version'] }}"
     position:
       x: 0
       y: 1
