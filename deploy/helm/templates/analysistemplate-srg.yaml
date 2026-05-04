@@ -1,11 +1,12 @@
 # AnalysisTemplate — "Is the Site Reliability Guardian happy with this canary?"
 #
 # Single Job that:
-#   1. Sends an SDLC bizevent to Dynatrace to trigger the guardian-validation workflow
-#   2. Polls `dtctl get guardian-run` until the verdict is ready (pass/fail)
+#   1. Sends an SDLC event to Dynatrace to trigger the guardian-validation workflow
+#   2. Polls `dtctl get wfe` for the workflow execution, then reads the verdict
+#      from `dtctl get wfe-task-result`
 #
-# The Dynatrace workflow receives the bizevent, runs the Site Reliability
-# Guardian evaluation, and writes the verdict. This Job reads it back.
+# The Dynatrace workflow receives the SDLC event, runs the Site Reliability
+# Guardian evaluation. This Job reads back the verdict via workflow executions.
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
@@ -49,17 +50,18 @@ spec:
                     args:
                       - |
                         set -euo pipefail
-                        GUARDIAN="checkout-release-guardian"
+                        WORKFLOW_ID="{{ .Values.analysis.workflowId }}"
 
-                        # ── 1. Authenticate dtctl (same pattern as CI) ───────
+                        # ── 1. Authenticate dtctl against the platform (apps) URL ──
                         dtctl config set-credentials default-token --token "$DT_API_TOKEN"
                         dtctl config set-context default \
-                          --environment "$DT_ENVIRONMENT" \
+                          --environment "$DT_PLATFORM_URL" \
                           --token-ref default-token \
                           --safety-level readwrite-all
                         dtctl config use-context default
 
                         # ── 2. Send SDLC event → triggers the workflow ─────
+                        SEND_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
                         echo "Sending SDLC event for ${APP_VERSION} at ${CANARY_WEIGHT}% weight..." >&2
                         curl -sf -X POST "${DT_ENVIRONMENT}/platform/ingest/v1/events.sdlc" \
                           -H "Authorization: Api-Token ${DT_API_TOKEN}" \
@@ -78,24 +80,51 @@ spec:
                             }
                           }' >&2
 
-                        echo "Bizevent sent. Waiting for Guardian evaluation..." >&2
+                        echo "SDLC event sent. Waiting for workflow execution..." >&2
                         sleep {{ .Values.analysis.pollIntervalSec }}
 
-                        # ── 3. Poll for the verdict ──────────────────────────
+                        # ── 3. Poll workflow executions for the verdict ────
                         for i in $(seq 1 {{ .Values.analysis.pollCount }}); do
-                          VERDICT=$(dtctl get guardian-run \
-                            --guardian "$GUARDIAN" \
-                            --latest \
-                            --output=json 2>/dev/null \
-                            | jq -r '.verdict // empty' || true)
+                          # Find the latest execution for our workflow started after the event
+                          EXEC_ID=$(dtctl get wfe -w "$WORKFLOW_ID" -o json 2>/dev/null \
+                            | jq -r '
+                              [ .[] | select(.title == "checkout-release-validation") ]
+                              | sort_by(.startedAt) | reverse | .[0].id // empty
+                            ' || true)
 
-                          if [ "$VERDICT" = "pass" ] || [ "$VERDICT" = "fail" ]; then
-                            echo "Guardian verdict: ${VERDICT}" >&2
-                            echo "$VERDICT"
-                            exit 0
+                          if [ -n "$EXEC_ID" ]; then
+                            STATE=$(dtctl get wfe "$EXEC_ID" -o json 2>/dev/null \
+                              | jq -r '.state // empty' || true)
+
+                            if [ "$STATE" = "COMPLETED" ]; then
+                              # Get the guardian verdict from the task result
+                              VERDICT=$(dtctl get wfe-task-result "$EXEC_ID" \
+                                --task run_validation -o json 2>/dev/null \
+                                | jq -r '.executionResult.validationStatus // empty' || true)
+
+                              if [ "$VERDICT" = "pass" ] || [ "$VERDICT" = "warning" ]; then
+                                echo "Guardian verdict: ${VERDICT}" >&2
+                                echo "pass"
+                                exit 0
+                              elif [ "$VERDICT" = "fail" ]; then
+                                echo "Guardian verdict: fail" >&2
+                                echo "fail"
+                                exit 0
+                              fi
+                              echo "Poll ${i}/{{ .Values.analysis.pollCount }}: execution completed, verdict=${VERDICT:-unknown}" >&2
+                            elif [ "$STATE" = "ERROR" ]; then
+                              echo "Workflow execution errored" >&2
+                              dtctl get wfe "$EXEC_ID" -o json 2>/dev/null \
+                                | jq -r '.stateInfo // empty' >&2 || true
+                              echo "fail"
+                              exit 0
+                            else
+                              echo "Poll ${i}/{{ .Values.analysis.pollCount }}: execution=${EXEC_ID} state=${STATE}" >&2
+                            fi
+                          else
+                            echo "Poll ${i}/{{ .Values.analysis.pollCount }}: no execution found yet" >&2
                           fi
 
-                          echo "Poll ${i}/{{ .Values.analysis.pollCount }}: verdict=${VERDICT:-pending}" >&2
                           sleep {{ .Values.analysis.pollIntervalSec }}
                         done
 

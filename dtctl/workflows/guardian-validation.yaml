@@ -27,8 +27,8 @@ tasks:
       objectId: "vu9U3hXa3q0AAAABADFhcHA6ZHluYXRyYWNlLnNpdGUucmVsaWFiaWxpdHkuZ3VhcmRpYW46Z3VhcmRpYW5zAAZ0ZW5hbnQABnRlbmFudAAkNzY0YmU4YTEtNWFmMy0zZTJiLTlkODYtZjM1OGI3ODIwNjNkvu9U3hXa3q0"
       timeframeInputType: "expression"
       timeframeSelector:
-        from: "{{ event()['timeframe.from'] | default('now-10m') }}"
-        to: "{{ event()['timeframe.to'] | default('now') }}"
+        from: "now-10m"
+        to: "now"
       variables:
         - name: app_version
           definition: "{{ event()['version'] }}"
