@@ -130,14 +130,13 @@ jobs:
             WF_TITLE=$(grep '^title:' "$wf" | sed 's/^title: *"\?\([^"]*\)"\?/\1/')
             echo "Upserting workflow: $WF_TITLE ($wf)"
 
-            # Find existing workflow by title and delete it to avoid duplicates
-            EXISTING_ID=$(dtctl get workflows -o json 2>/dev/null \
-              | jq -r ".[] | select(.title == \"${WF_TITLE}\") | .id" 2>/dev/null | head -1 || true)
-
-            if [ -n "$EXISTING_ID" ]; then
-              echo "  Deleting existing workflow $EXISTING_ID"
-              dtctl delete workflow "$EXISTING_ID" 2>/dev/null || true
-            fi
+            # Delete ALL existing workflows with this title to avoid duplicates
+            dtctl get workflows -o json 2>/dev/null \
+              | jq -r ".[] | select(.title == \"${WF_TITLE}\") | .id" 2>/dev/null \
+              | while read -r eid; do
+                  echo "  Deleting existing workflow $eid"
+                  dtctl delete workflow "$eid" 2>/dev/null || true
+                done
 
             echo "  Creating workflow from $wf"
             dtctl create workflow -f "$wf" || \
