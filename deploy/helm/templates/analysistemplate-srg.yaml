@@ -61,7 +61,7 @@ spec:
 
                         # ── 2. Send SDLC event → triggers the workflow ─────
                         echo "Sending SDLC event for ${APP_VERSION} at ${CANARY_WEIGHT}% weight..." >&2
-                        curl -sf -X POST "${DT_PLATFORM_URL}/platform/ingest/v1/events.sdlc" \
+                        curl -sf -X POST "${DT_ENVIRONMENT}/platform/ingest/v1/events.sdlc" \
                           -H "Authorization: Api-Token ${DT_API_TOKEN}" \
                           -H "Content-Type: application/json" \
                           -d '{
