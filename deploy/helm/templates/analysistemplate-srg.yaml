@@ -59,14 +59,14 @@ spec:
                           --safety-level readwrite-all
                         dtctl config use-context default
 
-                        # ── 2. Send SDLC bizevent → triggers the workflow ────
-                        echo "Sending SDLC bizevent for ${APP_VERSION} at ${CANARY_WEIGHT}% weight..." >&2
-                        curl -sf -X POST "${DT_ENVIRONMENT}/api/v2/bizevents/ingest" \
+                        # ── 2. Send SDLC event → triggers the workflow ─────
+                        echo "Sending SDLC event for ${APP_VERSION} at ${CANARY_WEIGHT}% weight..." >&2
+                        curl -sf -X POST "${DT_PLATFORM_URL}/platform/ingest/v1/events.sdlc" \
                           -H "Authorization: Api-Token ${DT_API_TOKEN}" \
                           -H "Content-Type: application/json" \
                           -d '{
                             "event.type": "validation.triggered",
-                            "event.kind": "SDLC_EVENT",
+                            "event.status": "started",
                             "application": "checkout",
                             "version": "'"${APP_VERSION}"'",
                             "timeframe.from": "now-10m",
