@@ -34,6 +34,7 @@ spec:
         app.version: {{ .Values.appVersion | quote }}
         app.kubernetes.io/version: {{ .Values.appVersion | quote }}
     spec:
+      enableServiceLinks: false
       containers:
         - name: checkout
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
