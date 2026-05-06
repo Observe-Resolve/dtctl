@@ -67,7 +67,7 @@ value:
         | summarize
             slow = countIf(duration / 1000000 > 200),
             total = count()
-        | fieldsAdd burn = (asDouble(slow) / asDouble(total)) / 0.05
+        | fieldsAdd burn = (toDouble(slow) / toDouble(total)) / 0.05
       comparisonOperator: "LESS_THAN_OR_EQUAL"
       target: 1.0
       warning: 0.5

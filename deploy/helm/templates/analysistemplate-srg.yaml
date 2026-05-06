@@ -96,18 +96,18 @@ spec:
                             STATE=$(dtctl get wfe "$EXEC_ID" -o json 2>/dev/null \
                               | jq -r '.state // empty' || true)
 
-                            if [ "$STATE" = "COMPLETED" ]; then
+                            if [ "$STATE" = "COMPLETED" ] || [ "$STATE" = "SUCCESS" ]; then
                               # Get the guardian verdict from the task result
                               VERDICT=$(dtctl get wfe-task-result "$EXEC_ID" \
                                 --task run_validation -o json 2>/dev/null \
-                                | jq -r '.executionResult.validationStatus // empty' || true)
+                                | jq -r '.validation_status // empty' || true)
 
                               if [ "$VERDICT" = "pass" ] || [ "$VERDICT" = "warning" ]; then
                                 echo "Guardian verdict: ${VERDICT}" >&2
                                 echo "pass"
                                 exit 0
-                              elif [ "$VERDICT" = "fail" ]; then
-                                echo "Guardian verdict: fail" >&2
+                              elif [ "$VERDICT" = "fail" ] || [ "$VERDICT" = "error" ]; then
+                                echo "Guardian verdict: ${VERDICT}" >&2
                                 echo "fail"
                                 exit 0
                               fi
