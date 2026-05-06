@@ -8,12 +8,20 @@
 ### --clustername       : name of your k8s cluster
 ### --dturl             : URL of your Dynatrace tenant, no trailing slash
 ###                       e.g. https://abc12345.live.dynatrace.com
+### --dtplatformurl     : Platform (apps) URL, no trailing slash
+###                       e.g. https://abc12345.apps.dynatrace.com
 ### --dtoperatortoken   : API token for the Dynatrace Operator
 ###                       Scopes: entities.read, settings.read, settings.write,
 ###                               activeGateTokenManagement.create
 ### --dtingesttoken     : Data ingest token for OTLP + DynaKube data ingest
 ###                       Scopes: metrics.ingest, logs.ingest, events.ingest,
 ###                               openTelemetryTrace.ingest
+### --dteventtoken      : API token for SDLC event ingestion (used by AnalysisTemplate)
+###                       Scopes: events.ingest, openpipeline.events_sdlc,
+###                               bizevents.ingest
+### --dtplatformtoken   : Platform token for dtctl automation API access
+###                       (used by AnalysisTemplate to poll workflow executions)
+###                       Scopes: automation:workflows:read
 ###
 ### What it deploys (in order):
 ###   1. cert-manager
@@ -63,6 +71,18 @@ while [ $# -gt 0 ]; do
           DTURL="$2"
          shift 2
           ;;
+       --dtplatformurl)
+          DTPLATFORMURL="$2"
+         shift 2
+          ;;
+       --dteventtoken)
+          DTEVENTTOKEN="$2"
+         shift 2
+          ;;
+       --dtplatformtoken)
+          DTPLATFORMTOKEN="$2"
+         shift 2
+          ;;
        --clustername)
          CLUSTERNAME="$2"
          shift 2
@@ -92,6 +112,21 @@ echo "Checking arguments"
 
  if [ -z "$DTOPERATORTOKEN" ]; then
    echo "Error: DT operator token not set!"
+   exit 1
+ fi
+
+ if [ -z "$DTPLATFORMURL" ]; then
+   echo "Error: DT platform URL not set!"
+   exit 1
+ fi
+
+ if [ -z "$DTEVENTTOKEN" ]; then
+   echo "Error: DT event token not set!"
+   exit 1
+ fi
+
+ if [ -z "$DTPLATFORMTOKEN" ]; then
+   echo "Error: DT platform token not set!"
    exit 1
  fi
 
@@ -189,6 +224,15 @@ echo "Deploying otel-demo-light"
 kubectl create namespace otel-demo
 kubectl label namespace otel-demo oneagent=false
 kubectl create serviceaccount opentelemetry-demo -n otel-demo
+
+# dtctl-auth secret — used by the AnalysisTemplate Job for SDLC events + workflow polling
+echo "Creating dtctl-auth secret (event token + platform token for AnalysisTemplate)"
+kubectl create secret generic dtctl-auth -n otel-demo \
+  --from-literal=DT_API_TOKEN="$DTEVENTTOKEN" \
+  --from-literal=DT_PLATFORM_TOKEN="$DTPLATFORMTOKEN" \
+  --from-literal=DT_ENVIRONMENT="$DTURL" \
+  --from-literal=DT_PLATFORM_URL="$DTPLATFORMURL" \
+  --dry-run=client -o yaml | kubectl apply -f -
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 helm repo update
 helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
@@ -219,4 +263,5 @@ echo "  Argo CD password:  kubectl -n argocd get secret argocd-initial-admin-sec
 echo "                       -o jsonpath='{.data.password}' | base64 -d ; echo"
 echo "  Application:       kubectl -n argocd get application otel-demo-light -w"
 echo "  Dynatrace UI:      $DTURL/ui/apps/dynatrace.services"
+echo "  Platform UI:       $DTPLATFORMURL"
 echo "================================================================================"

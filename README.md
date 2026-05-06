@@ -33,7 +33,7 @@ graph TD
     subgraph Kubernetes [Kubernetes — otel-demo namespace]
         ArgoCD["Argo CD"]
         Rollouts["Argo Rollouts<br/>canary 10% → 50% → 100%"]
-        Analysis["AnalysisTemplate<br/>(sends bizevent + polls verdict)"]
+        Analysis["AnalysisTemplate<br/>(sends SDLC event + polls verdict)"]
         Notifications["Argo Notifications<br/>(GitHub issue on abort)"]
         OtelDemo["otel-demo<br/>services"]
         Collector["OTel Collector"]
@@ -48,9 +48,9 @@ graph TD
     Repo -- "watches master" --> ArgoCD
     ArgoCD -- "syncs Helm chart" --> Rollouts
     Rollouts --> Analysis
-    Analysis -- "SDLC bizevent" --> Workflow
+    Analysis -- "SDLC event<br/>(event token)" --> Workflow
     Workflow -- "triggers evaluation" --> Guardian
-    Analysis -- "dtctl get<br/>guardian-run" --> Guardian
+    Analysis -- "dtctl get wfe<br/>(platform token)" --> Guardian
     Guardian -- "pass → promote" --> Rollouts
     Guardian -- "fail → abort" --> Rollouts
     Rollouts -- "on-rollout-aborted" --> Notifications
@@ -68,9 +68,9 @@ graph TD
 5. CI bumps `deploy/helm/values.yaml` with the new image tag and pushes to master
 6. Argo CD detects the values change and syncs the Helm chart to Kubernetes
 7. Argo Rollouts starts a canary deployment (10% → 50% → 100%)
-8. At each analysis gate, the AnalysisTemplate sends an SDLC bizevent to Dynatrace
+8. At each analysis gate, the AnalysisTemplate sends an SDLC event to Dynatrace (using the event token via curl)
 9. The `checkout-release-validation` workflow catches the event and triggers the Guardian evaluation
-10. The AnalysisTemplate polls `dtctl get guardian-run --latest` for the verdict
+10. The AnalysisTemplate polls `dtctl get wfe` for the workflow execution verdict (using the platform token)
 11. Guardian evaluates 3 objectives (availability, p95 latency, latency burn rate) — **pass** promotes, **fail** aborts
 12. On abort, Argo Rollouts Notifications auto-creates a GitHub issue for investigation
 
@@ -110,21 +110,36 @@ The CI/CD pipelines (`.github/workflows/release.yml`) require the following secr
 
 | Secret | Description | Where to get it |
 |---|---|---|
-| `DT_ENVIRONMENT` | Your Dynatrace tenant URL (e.g. `https://abc12345.live.dynatrace.com`) | Dynatrace → browser URL bar |
-| `DT_API_TOKEN` | Dynatrace API token used by `dtctl` in CI for applying manifests and sending SDLC events | See "Create the Dynatrace API Tokens" below |
+| `DT_PLATFORM_URL` | Your Dynatrace platform (apps) URL (e.g. `https://abc12345.apps.dynatrace.com`) | Dynatrace → browser URL bar (the `.apps.` domain) |
+| `DT_PLATFORM_TOKEN` | Platform token used by `dtctl` in CI for applying manifests (dashboards, SLOs, workflows, guardians) | See "Create the Dynatrace tokens" below |
 
 > `GITHUB_TOKEN` is provided automatically by GitHub Actions — no configuration needed. It is used for pushing the Docker image to `ghcr.io` and for committing the `values.yaml` bump back to master.
 
-### DT_API_TOKEN scopes
+### Two tokens, two purposes
 
-Create a Dynatrace API token (**Settings → Access tokens → Generate new token**) with these scopes:
+The system uses **two distinct tokens** because the Dynatrace platform API and the classic ingest API require different authentication:
 
-* `storage:events:write` — send SDLC events to trigger Guardian validation
+| Token | Type | Used by | Purpose |
+|---|---|---|---|
+| **Platform token** (`dt0s16.*`) | Platform | dtctl in CI + AnalysisTemplate Job | Apply manifests, query workflow executions, read task results |
+| **Event token** (`dt0c01.*`) | Classic API | AnalysisTemplate Job (curl) | Send SDLC events to trigger Guardian validation |
+
+#### Platform token scopes
+
+Create a platform token (**Settings → Access tokens → Generate new token**, choose Platform token type) with these scopes:
+
+* `automation:workflows:read` / `automation:workflows:write` — query and manage workflow executions
 * `settings:objects:read` / `settings:objects:write` — read and write guardians
-* `slo.read` / `slo.write` — manage SLOs
 * `document:documents:read` / `document:documents:write` — manage dashboards
-* `automation:workflows:read` / `automation:workflows:write` — manage workflows
-* `DataExport` / `metrics.read` — for `dtctl exec query`
+* `storage:events:read` — for DQL queries
+
+#### Event token scopes
+
+Create a classic API token (**Settings → Access tokens → Generate new token**) with these scopes:
+
+* `events.ingest` — send SDLC events
+* `openpipeline.events_sdlc` — SDLC event pipeline access
+* `bizevents.ingest` — business event ingestion
 
 ### Kubernetes secrets (created by deploy.sh)
 
@@ -132,11 +147,11 @@ The deployment script (`demo-app/deploy.sh`) creates these Kubernetes secrets au
 
 | Secret | Namespace | Keys | Purpose |
 |---|---|---|---|
-| `dynatrace-otelcol-dt-api-credentials` | `dynatrace` | `DT_ENDPOINT`, `DT_API_TOKEN` | OTel Collector → Dynatrace ingest |
+| `dynatrace` | `default` | `dynatrace_oltp_url`, `dt_api_token`, `clustername` | OTel Collector → Dynatrace ingest |
 | `dynakube` | `dynatrace` | operator + data ingest tokens | Dynatrace Operator (K8s monitoring) |
-| `dtctl-auth` | `otel-demo` | `DT_API_TOKEN`, `DT_ENVIRONMENT` | AnalysisTemplate → dtctl → Guardian |
+| `dtctl-auth` | `otel-demo` | `DT_API_TOKEN`, `DT_PLATFORM_TOKEN`, `DT_ENVIRONMENT`, `DT_PLATFORM_URL` | AnalysisTemplate → SDLC events + dtctl workflow polling |
 
-The `dtctl-auth` secret is used by the Argo Rollouts AnalysisTemplate to authenticate with Dynatrace (same API token approach as CI).
+The `dtctl-auth` secret carries both tokens: `DT_API_TOKEN` (classic, for SDLC event ingestion via curl) and `DT_PLATFORM_TOKEN` (platform, for `dtctl get wfe` workflow execution queries).
 
 ## Getting started
 
@@ -144,9 +159,10 @@ The `dtctl-auth` secret is used by the Argo Rollouts AnalysisTemplate to authent
 ### Dynatrace Tenant
 #### 1. Dynatrace Tenant - start a trial
 If you don't have any Dynatrace tenant , then I suggest to create a trial using the following link : [Dynatrace Trial](https://dt-url.net/observable-trial)
-Once you have your Tenant save the Dynatrace tenant url in the variable `DT_TENANT_URL` (for example : https://dedededfrf.live.dynatrace.com)
+Once you have your Tenant save the Dynatrace URLs:
 ```
-DT_TENANT_URL=<YOUR TENANT Host>
+DT_TENANT_URL=<YOUR TENANT URL>          # e.g. https://abc12345.live.dynatrace.com
+DT_PLATFORM_URL=<YOUR PLATFORM URL>      # e.g. https://abc12345.apps.dynatrace.com
 ```
 
 ##### 2. Create the Dynatrace API Tokens
@@ -185,42 +201,58 @@ Save the value of the token . We will use it later to store in a k8S secret
 ```shell
 DATA_INGEST_TOKEN=<YOUR TOKEN VALUE>
 ```
-###### dtctl OAuth client
+###### Platform token (for dtctl + AnalysisTemplate workflow polling)
 
-`dtctl` and the GitHub Actions release pipeline (`.github/workflows/release.yml`) authenticate to your tenant via an OAuth client (separate from the API tokens above). Create one in **Dynatrace → Settings → Integration → Dynatrace tokens → OAuth clients**, with the following scopes:
+Create a Dynatrace **platform token** (`dt0s16.*`) in **Settings → Access tokens → Generate new token** (choose Platform token type) with these scopes:
 
-**Required scopes:**
-* All dtctl scopes (use the preset, then add the following)
-* `storage:events:write` — for sending SDLC events to trigger Site Reliability Guardian validation
-* `app-engine:apps:run` — for executing workflows
-* `document:documents:write` — for dashboards, notebooks
-* `automation:workflows:write` — for workflows
-* `slo:slo:write` — for SLOs
-* `settings:objects:write` — for guardians
+* `automation:workflows:read` / `automation:workflows:write` — query and manage workflow executions
+* `settings:objects:read` / `settings:objects:write` — read and write guardians
+* `document:documents:read` / `document:documents:write` — manage dashboards
+* `storage:events:read` — for DQL queries
 
-Save the values into the following variables:
-* OAUTH_CLIENT_ID
-* OAUTH_CLIENT_SECRET
+This token is used by:
+- The GitHub Actions CI pipeline (`release.yml`) for `dtctl apply`
+- The AnalysisTemplate Job pod for `dtctl get wfe` (polling workflow execution results)
+
 ```shell
-OAUTH_CLIENT_ID=<YOUR CLIENTID VALUE>
-OAUTH_CLIENT_SECRET=<YOUR OAUTH SECRET VALUE>
+DT_PLATFORM_TOKEN=<YOUR PLATFORM TOKEN VALUE>
+```
+
+###### Event token (for SDLC event ingestion)
+
+Create a classic **API token** (`dt0c01.*`) with these scopes:
+
+* `events.ingest` — send SDLC events
+* `openpipeline.events_sdlc` — SDLC event pipeline access
+* `bizevents.ingest` — business event ingestion
+
+This token is used by the AnalysisTemplate Job pod to send SDLC events via curl to the classic API endpoint.
+
+```shell
+DT_EVENT_TOKEN=<YOUR EVENT TOKEN VALUE>
 ```
 
 ### Deploy most of the components
 The deployment script will deploy the entire environment — cert-manager, OpenTelemetry Operator, Dynatrace Operator + DynaKube (K8s monitoring only), the OTel collector gateway + Instrumentation CR, Argo CD (trimmed), Argo Rollouts + the SRG AnalysisTemplate, the otel-demo-light application, and the Argo CD Application that watches `deploy/helm/values.yaml`:
 ```shell
 chmod 777 demo-app/deploy.sh
-./demo-app/deploy.sh --clustername "${CLUSTERNAME}" --dturl "${DT_TENANT_URL}" --dtingesttoken "${DATA_INGEST_TOKEN}" --dtoperatortoken "${API_TOKEN}"
+./demo-app/deploy.sh \
+  --clustername "${CLUSTERNAME}" \
+  --dturl "${DT_TENANT_URL}" \
+  --dtplatformurl "${DT_PLATFORM_URL}" \
+  --dtingesttoken "${DATA_INGEST_TOKEN}" \
+  --dtoperatortoken "${API_TOKEN}" \
+  --dteventtoken "${DT_EVENT_TOKEN}" \
+  --dtplatformtoken "${DT_PLATFORM_TOKEN}"
 ```
 
 ## Apply the baseline dtctl resources
 
 Let's apply the baseline `dtctl` manifests — dashboards, SLOs, workflows, and the Site Reliability Guardian.
 
-First authenticate dtctl against your tenant:
+First authenticate dtctl against your tenant (interactive browser-based OAuth login):
 ```shell
-dtctl auth login --oauth-client-id "${OAUTH_CLIENT_ID}" --oauth-client-secret "${OAUTH_CLIENT_SECRET}" --env "${DT_TENANT_URL}"
-dtctl auth verify
+dtctl auth login --context my-env --environment "${DT_PLATFORM_URL}"
 ```
 
 Then apply the baseline:

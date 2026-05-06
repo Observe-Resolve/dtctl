@@ -97,12 +97,12 @@ jobs:
 
       - name: dtctl auth
         env:
-          DT_API_TOKEN:   ${{ secrets.DT_API_TOKEN }}
-          DT_ENVIRONMENT: ${{ secrets.DT_ENVIRONMENT }}
+          DT_PLATFORM_TOKEN: ${{ secrets.DT_PLATFORM_TOKEN }}
+          DT_PLATFORM_URL:   ${{ secrets.DT_PLATFORM_URL }}
         run: |
-          dtctl config set-credentials default-token --token "$DT_API_TOKEN"
+          dtctl config set-credentials default-token --token "$DT_PLATFORM_TOKEN"
           dtctl config set-context default \
-            --environment "$DT_ENVIRONMENT" \
+            --environment "$DT_PLATFORM_URL" \
             --token-ref default-token \
             --safety-level readwrite-all
           dtctl config use-context default

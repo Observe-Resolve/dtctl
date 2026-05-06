@@ -53,7 +53,7 @@ spec:
                         WORKFLOW_ID="{{ .Values.analysis.workflowId }}"
 
                         # ── 1. Authenticate dtctl against the platform (apps) URL ──
-                        dtctl config set-credentials default-token --token "$DT_API_TOKEN"
+                        dtctl config set-credentials default-token --token "$DT_PLATFORM_TOKEN"
                         dtctl config set-context default \
                           --environment "$DT_PLATFORM_URL" \
                           --token-ref default-token \
