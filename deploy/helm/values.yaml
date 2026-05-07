@@ -11,7 +11,7 @@
 
 image:
   repository: ghcr.io/observe-resolve/checkout
-  tag: 1.0.3
+  tag: 1.0.2
   pullPolicy: Always
 
 # Mirrored into pod env as APP_VERSION + into resource attributes via the
