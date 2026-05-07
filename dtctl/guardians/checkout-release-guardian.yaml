@@ -27,6 +27,7 @@ value:
         | filter service.version == "$app_version"
         | summarize total = count(), good = countIf(span.status_code == "error")
         | fieldsAdd ok = ((toDouble(total) - toDouble(good)) / toDouble(total)) * 100.0
+        | fields ok
       displayUnit:
         base: "percent"
         display: "%"
@@ -68,6 +69,7 @@ value:
             slow = countIf(duration / 1000000 > 200),
             total = count()
         | fieldsAdd burn = (toDouble(slow) / toDouble(total)) / 0.05
+        | fields burn
       comparisonOperator: "LESS_THAN_OR_EQUAL"
       target: 1.0
       warning: 0.5
