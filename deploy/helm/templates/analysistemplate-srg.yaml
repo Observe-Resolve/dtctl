@@ -23,13 +23,13 @@ spec:
     - name: srg-pass
       count: 1
 
-      successCondition: "result == \"pass\""
-      failureCondition: "result == \"fail\""
+      # Job provider uses exit code: 0 = pass, non-zero = fail
+      # (successCondition/failureCondition are not evaluated for Jobs)
 
       provider:
         job:
           spec:
-            backoffLimit: 1
+            backoffLimit: 0
             activeDeadlineSeconds: {{ mul .Values.analysis.pollIntervalSec .Values.analysis.pollCount }}
             template:
               spec:
@@ -106,22 +106,19 @@ spec:
                                 | jq -r '.validation_status // empty' || true)
 
                               if [ "$VERDICT" = "pass" ] || [ "$VERDICT" = "warning" ]; then
-                                echo "Guardian verdict: ${VERDICT}" >&2
-                                echo "pass"
+                                echo "Guardian verdict: ${VERDICT} → PASS" >&2
                                 exit 0
                               elif [ "$VERDICT" = "fail" ] || [ "$VERDICT" = "error" ]; then
-                                echo "Guardian verdict: ${VERDICT}" >&2
-                                echo "fail"
-                                exit 0
+                                echo "Guardian verdict: ${VERDICT} → FAIL" >&2
+                                exit 1
                               fi
                               echo "Poll ${i}/{{ .Values.analysis.pollCount }}: execution completed, verdict=${VERDICT:-unknown}" >&2
                             elif [ "$STATE" = "ERROR" ]; then
-                              echo "Workflow execution errored" >&2
+                              echo "Workflow execution errored → FAIL" >&2
                               dtctl get wfe "$EXEC_ID" -o json 2>/dev/null \
                                 | tr -d '\000-\011\013-\037' \
                                 | jq -r '.stateInfo // empty' >&2 || true
-                              echo "fail"
-                              exit 0
+                              exit 1
                             else
                               echo "Poll ${i}/{{ .Values.analysis.pollCount }}: execution=${EXEC_ID} state=${STATE}" >&2
                             fi
