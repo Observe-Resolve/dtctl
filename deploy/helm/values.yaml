@@ -11,12 +11,12 @@
 
 image:
   repository: ghcr.io/observe-resolve/checkout
-  tag: 1.0.2
+  tag: 1.0.3
   pullPolicy: Always
 
 # Mirrored into pod env as APP_VERSION + into resource attributes via the
 # OTel Operator's Instrumentation CR. Keep in sync with image.tag.
-appVersion: 1.0.2
+appVersion: 1.0.3
 
 # Replica count for the Rollout's stable pool.
 # Canary scales proportionally to setWeight (see templates/rollout.yaml).
