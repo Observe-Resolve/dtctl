@@ -46,7 +46,9 @@ value:
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
         | filter service.version == "$app_version"
-        | summarize p95 = percentile(duration, 95) / 1000000
+        | summarize total = count(), p95_raw = percentile(duration, 95)
+        | fieldsAdd p95 = if(total > 0, p95_raw / 1000000, else:0.0)
+        | fields p95
       displayUnit:
         base: "millisecond"
         display: "ms"

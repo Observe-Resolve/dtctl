@@ -132,7 +132,7 @@ jobs:
 
             # Delete ALL existing workflows with this title to avoid duplicates
             dtctl get workflows -o json 2>/dev/null \
-              | jq -r ".[] | select(.title == \"${WF_TITLE}\") | .id" 2>/dev/null \
+              | jq -r ".result[] | select(.title == \"${WF_TITLE}\") | .id" 2>/dev/null \
               | while read -r eid; do
                   echo "  Deleting existing workflow $eid"
                   dtctl delete workflow "$eid" 2>/dev/null || true
