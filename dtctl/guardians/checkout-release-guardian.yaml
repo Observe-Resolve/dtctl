@@ -26,7 +26,7 @@ value:
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
         | filter service.version == "$app_version"
         | summarize total = count(), good = countIf(span.status_code == "error")
-        | fieldsAdd ok = ((toDouble(total) - toDouble(good)) / toDouble(total)) * 100.0
+        | fieldsAdd ok = if(total > 0, ((toDouble(total) - toDouble(good)) / toDouble(total)) * 100.0, else:100.0)
         | fields ok
       displayUnit:
         base: "percent"
@@ -68,7 +68,7 @@ value:
         | summarize
             slow = countIf(duration / 1000000 > 200),
             total = count()
-        | fieldsAdd burn = (toDouble(slow) / toDouble(total)) / 0.05
+        | fieldsAdd burn = if(total > 0, (toDouble(slow) / toDouble(total)) / 0.05, else:0.0)
         | fields burn
       comparisonOperator: "LESS_THAN_OR_EQUAL"
       target: 1.0
