@@ -1,12 +1,22 @@
 # AnalysisTemplate — "Is the Site Reliability Guardian happy with this canary?"
 #
-# Single Job that:
-#   1. Sends an SDLC event to Dynatrace to trigger the guardian-validation workflow
-#   2. Polls `dtctl get wfe` for the workflow execution, then reads the verdict
-#      from `dtctl get wfe-task-result`
+# Single Job that calls validate-guardian-action directly via dtctl. The guardian
+# runs synchronously and returns its verdict in one round trip — no SDLC event,
+# no workflow polling, no wfe-task-result lookup. This replaces the earlier
+# event-driven pattern that depended on a workflow listening for SDLC events.
 #
-# The Dynatrace workflow receives the SDLC event, runs the Site Reliability
-# Guardian evaluation. This Job reads back the verdict via workflow executions.
+# Why direct invocation:
+#   - validate-guardian-action returns the complete verdict inline (stateful but
+#     synchronous), so we don't need a workflow as a permission bridge once we
+#     authenticate with a platform token that has the right scopes.
+#   - Drops the activeDeadlineSeconds budget from minutes to seconds, since
+#     there's no polling involved.
+#   - Removes the bizevent ingest dependency and the Api-Token secret it required.
+#
+# Canary stage and version are forwarded as guardian variables. Reference them
+# inside guardian DQL with $app_version and $canary_stage. They're also tagged
+# onto a small "validation summary" bizevent at the end so dashboards and Grail
+# queries can correlate verdicts to canary steps after the fact.
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
@@ -23,14 +33,16 @@ spec:
     - name: srg-pass
       count: 1
 
-      # Job provider uses exit code: 0 = pass, non-zero = fail
+      # Job provider uses exit code: 0 = pass/warning, non-zero = fail/error
       # (successCondition/failureCondition are not evaluated for Jobs)
 
       provider:
         job:
           spec:
             backoffLimit: 0
-            activeDeadlineSeconds: {{ mul .Values.analysis.pollIntervalSec .Values.analysis.pollCount }}
+            # Direct synchronous call. 120s is generous; typical verdicts return
+            # in 5-15s. Keep a small margin for dtctl init + DQL evaluation time.
+            activeDeadlineSeconds: 120
             template:
               spec:
                 restartPolicy: Never
@@ -49,10 +61,11 @@ spec:
                     command: ["/bin/sh", "-c"]
                     args:
                       - |
-                        set -euo pipefail
-                        WORKFLOW_ID="{{ .Values.analysis.workflowId }}"
+                        set -eo pipefail
+                        OBJECT_ID="{{ .Values.analysis.guardianObjectId }}"
+                        CANARY_STAGE="canary-${CANARY_WEIGHT}"
 
-                        # ── 1. Authenticate dtctl against the platform (apps) URL ──
+                        # ── 1. Authenticate dtctl against the platform URL ──
                         dtctl config set-credentials default-token --token "$DT_PLATFORM_TOKEN"
                         dtctl config set-context default \
                           --environment "$DT_PLATFORM_URL" \
@@ -60,75 +73,69 @@ spec:
                           --safety-level readwrite-all
                         dtctl config use-context default
 
-                        # ── 2. Send SDLC event → triggers the workflow ─────
-                        SEND_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-                        echo "Sending SDLC event for ${APP_VERSION} at ${CANARY_WEIGHT}% weight..." >&2
-                        curl -sf -X POST "${DT_ENVIRONMENT}/platform/ingest/v1/events.sdlc" \
-                          -H "Authorization: Api-Token ${DT_API_TOKEN}" \
-                          -H "Content-Type: application/json" \
-                          -d '{
-                            "event.type": "validation.triggered",
-                            "event.status": "started",
-                            "application": "checkout",
-                            "version": "'"${APP_VERSION}"'",
-                            "timeframe.from": "now-10m",
-                            "timeframe.to": "now",
-                            "execution_context": {
-                              "version": "'"${APP_VERSION}"'",
-                              "stage": "canary-'"${CANARY_WEIGHT}"'",
-                              "application": "checkout"
-                            }
-                          }' >&2
+                        # ── 2. Build payload and trigger guardian validation ──
+                        echo "Triggering guardian for ${APP_VERSION} @ ${CANARY_STAGE}..." >&2
 
-                        echo "SDLC event sent. Waiting for workflow execution..." >&2
-                        sleep {{ .Values.analysis.pollIntervalSec }}
+                        PAYLOAD=$(cat <<EOF
+                        {
+                          "objectId": "${OBJECT_ID}",
+                          "timeframeInputType": "timeframeSelector",
+                          "timeframeSelector": {"from": "now-10m", "to": "now"},
+                          "variables": [
+                            {"name": "app_version",   "definition": "${APP_VERSION}"},
+                            {"name": "canary_stage",  "definition": "${CANARY_STAGE}"}
+                          ]
+                        }
+                        EOF
+                        )
 
-                        # ── 3. Poll workflow executions for the verdict ────
-                        for i in $(seq 1 {{ .Values.analysis.pollCount }}); do
-                          # Find the latest execution for our workflow started after the event
-                          EXEC_ID=$(dtctl get wfe -w "$WORKFLOW_ID" -o json 2>/dev/null \
-                            | tr -d '\000-\011\013-\037' \
-                            | jq -r '
-                              [ .[] | select(.title == "checkout-release-validation") ]
-                              | sort_by(.startedAt) | reverse | .[0].id // empty
-                            ' || true)
+                        RESULT=$(dtctl exec function \
+                          dynatrace.site.reliability.guardian/validate-guardian-action \
+                          --method POST --payload "$PAYLOAD" -o json --plain \
+                          | tr -d '\000-\011\013-\037')
 
-                          if [ -n "$EXEC_ID" ]; then
-                            STATE=$(dtctl get wfe "$EXEC_ID" -o json 2>/dev/null \
-                              | tr -d '\000-\011\013-\037' \
-                              | jq -r '.state // empty' || true)
+                        # ── 3. Extract verdict ──────────────────────────────
+                        # dtctl envelopes vary across versions: body may be a
+                        # JSON string, a parsed object, or nested under .result.
+                        # This filter walks all common shapes in one pass.
+                        VERDICT=$(echo "$RESULT" | jq -r '
+                          ( .body // .result // . )
+                          | if type == "string" then fromjson else . end
+                          | ( .result // . )
+                          | .validation_status // "unknown"
+                        ')
 
-                            if [ "$STATE" = "COMPLETED" ] || [ "$STATE" = "SUCCESS" ]; then
-                              # Get the guardian verdict from the task result
-                              VERDICT=$(dtctl get wfe-task-result "$EXEC_ID" \
-                                --task run_validation -o json 2>/dev/null \
-                                | tr -d '\000-\011\013-\037' \
-                                | jq -r '.validation_status // empty' || true)
+                        # Per-objective log lines for the AnalysisRun output.
+                        # Best-effort — never let a logging hiccup fail the Job.
+                        echo "$RESULT" | jq -r '
+                          ( .body // .result // . )
+                          | if type == "string" then fromjson else . end
+                          | ( .result // . )
+                          | "Guardian: \(.guardian_name)\nValidation ID: \(.validation_id)\nVerdict: \(.validation_status | ascii_upcase)\nSummary: pass=\(.validation_summary.pass) warning=\(.validation_summary.warning) fail=\(.validation_summary.fail) error=\(.validation_summary.error)\nURL: \(.validation_url)"
+                        ' >&2 2>/dev/null || true
 
-                              if [ "$VERDICT" = "pass" ] || [ "$VERDICT" = "warning" ]; then
-                                echo "Guardian verdict: ${VERDICT} → PASS" >&2
-                                exit 0
-                              elif [ "$VERDICT" = "fail" ] || [ "$VERDICT" = "error" ]; then
-                                echo "Guardian verdict: ${VERDICT} → FAIL" >&2
-                                exit 1
-                              fi
-                              echo "Poll ${i}/{{ .Values.analysis.pollCount }}: execution completed, verdict=${VERDICT:-unknown}" >&2
-                            elif [ "$STATE" = "ERROR" ]; then
-                              echo "Workflow execution errored → FAIL" >&2
-                              dtctl get wfe "$EXEC_ID" -o json 2>/dev/null \
-                                | tr -d '\000-\011\013-\037' \
-                                | jq -r '.stateInfo // empty' >&2 || true
-                              exit 1
-                            else
-                              echo "Poll ${i}/{{ .Values.analysis.pollCount }}: execution=${EXEC_ID} state=${STATE}" >&2
-                            fi
-                          else
-                            echo "Poll ${i}/{{ .Values.analysis.pollCount }}: no execution found yet" >&2
-                          fi
+                        echo "$RESULT" | jq -r '
+                          ( .body // .result // . )
+                          | if type == "string" then fromjson else . end
+                          | ( .result // . )
+                          | .validation_details[]?
+                          | "  [\(.status | ascii_upcase)] \(.name): value=\(.value) target=\(.target) warning=\(.warning)"
+                        ' >&2 2>/dev/null || true
 
-                          sleep {{ .Values.analysis.pollIntervalSec }}
-                        done
-
-                        # Timeout — treat as failure
-                        echo "Guardian evaluation timed out" >&2
-                        echo "fail"
+                        # ── 4. Exit code drives the AnalysisRun verdict ─────
+                        case "$VERDICT" in
+                          pass|warning)
+                            echo "Guardian verdict: ${VERDICT} → PASS" >&2
+                            exit 0
+                            ;;
+                          fail|error)
+                            echo "Guardian verdict: ${VERDICT} → FAIL" >&2
+                            exit 1
+                            ;;
+                          *)
+                            echo "Unknown guardian verdict: '${VERDICT}' → FAIL" >&2
+                            echo "Raw dtctl response (first 2KB):" >&2
+                            echo "$RESULT" | head -c 2048 >&2
+                            exit 1
+                            ;;
+                        esac

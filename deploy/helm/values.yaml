@@ -28,12 +28,19 @@ resources:
 
 # SRG AnalysisTemplate — these are the names the Rollout's analysis steps
 # reference. Don't rename without updating templates/rollout.yaml.
+#
+# As of the direct-invocation refactor, the AnalysisRun pod calls
+# `validate-guardian-action` synchronously and exits on the verdict.
+# No SDLC bizevent, no workflow polling — so pollIntervalSec, pollCount,
+# and workflowId are gone. The pod's activeDeadlineSeconds is hardcoded
+# to 120s in the template since the call typically returns in seconds.
 analysis:
   templateName: srg-verdict
-  pollIntervalSec: 30
-  pollCount: 24        # 30s × 24 = 12-minute ceiling per analysis step
   dtctlImage: hrexed/dtctl:latest  # Container image for running dtctl guardian checks
-  workflowId: "f95479c8-c290-49af-8811-13730b1519b2"  # checkout-release-validation workflow
+  # Site Reliability Guardian objectId for the checkout-release-guardian.
+  # Apply guardian definition first: dtctl apply -f dtctl/guardians/checkout-release-guardian.yaml
+  # then copy the resulting objectId from `dtctl get settings --schema app:dynatrace.site.reliability.guardian:guardians`.
+  guardianObjectId: "vu9U3hXa3q0AAAABADFhcHA6ZHluYXRyYWNlLnNpdGUucmVsaWFiaWxpdHkuZ3VhcmRpYW46Z3VhcmRpYW5zAAZ0ZW5hbnQABnRlbmFudAAkNzY0YmU4YTEtNWFmMy0zZTJiLTlkODYtZjM1OGI3ODIwNjNkvu9U3hXa3q0"
 
 # Canary strategy. Edit cautiously — the on-camera scenarios assume two
 # analysis gates (10 % then 50 %) before full cutover.
