@@ -1,9 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git checkout:*)",
-      "Bash(git stash:*)",
-      "Bash(git add:*)"
+      "Edit",
+      "Write",
+      "Bash(git *)",
+      "Bash(weaver *)",
+      "Bash(make *)",
+      "Bash(dtctl *)",
+      "Bash(envsubst *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(diff *)"
     ]
   }
 }

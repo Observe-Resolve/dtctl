@@ -18,7 +18,8 @@ npx skills add henrikrexed/observability-agent-skills
 ```bash
 git checkout -b feat/cart-size-attribute
 
-claude -p "$(cat prompts/scenario-1-add-cart-size.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)"
+claude -p "$(cat prompts/scenario-1-add-cart-size.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)" \
+  --allowedTools Edit Write Bash
 ```
 
 ## Expected behavior on camera

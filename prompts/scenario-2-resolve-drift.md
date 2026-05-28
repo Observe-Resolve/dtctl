@@ -14,7 +14,8 @@ gh issue view 42 > /tmp/ticket.md
 
 claude -p "$(cat prompts/scenario-2-resolve-drift.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)
 TICKET:
-$(cat /tmp/ticket.md)"
+$(cat /tmp/ticket.md)" \
+  --allowedTools Edit Write Bash
 ```
 
 ## Expected behavior on camera

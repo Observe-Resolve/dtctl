@@ -20,7 +20,8 @@ Same four skills as Beat 1. The `observability-agent-skills` pack is the most im
 ```bash
 git checkout -b release/v1.1.2
 
-claude -p "$(cat prompts/scenario-3-stage-regression.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)"
+claude -p "$(cat prompts/scenario-3-stage-regression.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)" \
+  --allowedTools Edit Write Bash
 ```
 
 ## Expected behavior on camera
