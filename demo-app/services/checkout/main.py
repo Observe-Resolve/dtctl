@@ -87,8 +87,7 @@ class CheckoutServicer(demo_pb2_grpc.CheckoutServiceServicer):
             span.set_attribute("order.total_usd", _calculate_total(request))
 
             # ─── Recommended attributes (experimental in the registry) ───
-            # Beat 1's add-cart-size patch inserts this line:
-            # span.set_attribute("checkout.cart.size", len(request_items))
+            span.set_attribute("checkout.cart.size", len(request.items))
 
             span.set_attribute("app.user_id", request.user_id)
             span.set_attribute("app.user_currency", request.user_currency)
