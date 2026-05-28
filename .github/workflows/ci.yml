@@ -45,7 +45,13 @@ jobs:
           weaver registry diff \
             -r weaver/registry \
             --baseline-registry weaver/baselines/main \
-            2>&1 | tee weaver-diff.md
+            2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/weaver-raw.txt
+          {
+            echo '## Weaver Registry Diff'
+            echo '```'
+            cat /tmp/weaver-raw.txt
+            echo '```'
+          } > weaver-diff.md
         continue-on-error: true
 
       - name: Comment diff on the PR

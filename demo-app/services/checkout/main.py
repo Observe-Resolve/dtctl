@@ -87,7 +87,8 @@ class CheckoutServicer(demo_pb2_grpc.CheckoutServiceServicer):
             span.set_attribute("order.total_usd", _calculate_total(request))
 
             # ─── Recommended attributes (experimental in the registry) ───
-            span.set_attribute("checkout.cart.size", len(request.items))
+            # Proto has no items field; derive a demo cart size from user_id.
+            span.set_attribute("checkout.cart.size", (hash(request.user_id) % 10) + 1)
 
             span.set_attribute("app.user_id", request.user_id)
             span.set_attribute("app.user_currency", request.user_currency)
