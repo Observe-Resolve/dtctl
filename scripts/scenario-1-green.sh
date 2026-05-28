@@ -14,7 +14,7 @@ TAG="v1.1.0"
 log() { printf '\033[1;32m[scenario-1]\033[0m %s\n' "$*"; }
 
 log "creating branch $BR"
-git checkout -b "$BR" main
+git checkout -b "$BR" master
 
 log "patch 1/3 — add span attribute in code"
 cat > /tmp/patch1.py <<'PY'
@@ -24,21 +24,112 @@ PY
 # In the real demo, apply a proper python patch; here we gesture at it:
 ./demo-app/services/checkout/patches/add-cart-size.sh
 
-log "patch 2/3 — add attribute to weaver/registry/checkout.yaml"
-# (Registry already has cart.size defined — if you regenerated registries, skip.)
-grep -q 'id: cart.size' weaver/registry/checkout.yaml || cat >> weaver/registry/checkout.yaml <<'YAML'
-      - id: cart.size
+log "patch 2/3 — add checkout.cart.size to weaver/registry/checkout.yaml"
+if ! grep -q 'id: checkout.cart.size' weaver/registry/checkout.yaml; then
+  # Insert the attribute definition before checkout.order.total_usd
+  python3 - <<'PY'
+import pathlib, re
+p = pathlib.Path("weaver/registry/checkout.yaml")
+s = p.read_text()
+
+# Add attribute definition before checkout.order.total_usd
+attr_block = """      - id: checkout.cart.size
         type: int
         requirement_level: recommended
         stability: experimental
         brief: "Number of distinct line items in the cart at checkout."
-YAML
+        examples: [1, 5]
 
-log "patch 3/3 — add Cart size tile to dashboard"
-# The tile is already present in dtctl/dashboards/service-health.yaml — verify:
-grep -q 'Cart size distribution' dtctl/dashboards/service-health.yaml || {
-  echo "::error::dashboard tile missing — patch manually" && exit 1
-}
+      - id: checkout.order.total_usd"""
+s = s.replace("      - id: checkout.order.total_usd", attr_block, 1)
+
+# Add span ref before checkout.order.total_usd ref
+ref_block = """      - ref: checkout.cart.size
+      - ref: checkout.order.total_usd"""
+s = s.replace("      - ref: checkout.order.total_usd", ref_block, 1)
+
+p.write_text(s)
+print("[scenario-1] added checkout.cart.size to registry")
+PY
+else
+  echo "[scenario-1] checkout.cart.size already in registry — skipping"
+fi
+
+log "patch 3/3 — add Cart size distribution tile to dashboard"
+if ! grep -q 'Cart size distribution' dtctl/dashboards/service-health.yaml; then
+  python3 - <<'PY'
+import pathlib, yaml
+
+p = pathlib.Path("dtctl/dashboards/service-health.yaml")
+s = p.read_text()
+
+# Insert new layout "10" (beside tile 7 — Checkout error rate, same row, half-width)
+# and new tile "10" with the histogram query.
+# We add layout entry and tile entry by appending before the closing sections.
+
+# Add layout for tile 10: same row as tile 7 (y:13), right half
+layout_entry = '''    "10":
+      h: 5
+      w: 12
+      x: 12
+      "y": 13'''
+
+tile_entry = '''    "10":
+      davis:
+        davisVisualization:
+          isAvailable: true
+        enabled: false
+      query: |
+        fetch spans, from:now()-1h
+        | filter service.name == "checkout"
+        | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+        | filter app.version == "${APP_VERSION}"
+        | filter isNotNull(checkout.cart.size)
+        | summarize dist = histogram(checkout.cart.size), buckets: 10
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Cart size distribution
+      type: data
+      visualization: histogram
+      visualizationSettings:
+        autoSelectVisualization: false'''
+
+# Shrink tile 7 to left half (w:12 x:0) so tile 10 sits beside it.
+# Tile 7 is already at x:12 y:13 w:12 — move it to x:0 to make room,
+# or keep tile 7 where it is and put 10 at x:0. Actually tile 7 is already
+# at x:12, so tile 10 goes at x:0.
+
+# Insert layout "10" after layout "9"
+s = s.replace(
+    '''    "9":
+      h: 6
+      w: 12
+      x: 12
+      "y": 18''',
+    '''    "9":
+      h: 6
+      w: 12
+      x: 12
+      "y": 18
+''' + layout_entry,
+)
+
+# Insert tile "10" after tile "9" block (before variables)
+s = s.replace(
+    "  variables: []",
+    tile_entry + "\n  variables: []",
+)
+
+p.write_text(s)
+print("[scenario-1] added Cart size distribution tile to dashboard")
+PY
+else
+  echo "[scenario-1] Cart size distribution tile already in dashboard — skipping"
+fi
 
 log "local weaver check + diff"
 weaver registry check -r weaver/registry
@@ -60,7 +151,7 @@ log "merging"
 gh pr merge "$PR_URL" --squash --delete-branch
 
 log "tagging $TAG"
-git checkout main && git pull
+git checkout master && git pull
 git tag "$TAG"
 git push --tags
 

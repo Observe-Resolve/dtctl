@@ -20,9 +20,7 @@ Same four skills as Beat 1. The `observability-agent-skills` pack is the most im
 ```bash
 git checkout -b release/v1.1.2
 
-claude code \
-  --skill skills/observability-repair \
-  --prompt "$(cat prompts/scenario-3-stage-regression.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)"
+claude -p "$(cat prompts/scenario-3-stage-regression.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)"
 ```
 
 ## Expected behavior on camera
@@ -57,7 +55,7 @@ Touch exactly **one** file:
 
 `demo-app/services/checkout/main.py`
 
-Inside the `_charge(order)` function, between the line that sets `payment.amount_usd` and the line that sets `outcome`, insert:
+Inside the `_charge(request)` function, between the line that sets `payment.amount_usd` and the line that assigns `transaction_id`, insert:
 
 ```python
         time.sleep(0.6)  # +600ms latency on payment.charge

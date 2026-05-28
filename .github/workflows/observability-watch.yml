@@ -63,10 +63,12 @@ jobs:
           echo "$CHANGED" > /tmp/changed.txt
           echo "changed files:"; cat /tmp/changed.txt | sed 's/^/  /'
 
-          TOUCHED_CODE=$(grep -E '(checkout|payment|cart|frontend|shipping|recommendation)/.*\.(py|ts|js|go|java)$' /tmp/changed.txt || true)
-          TOUCHED_REGISTRY=$(grep -E '^weaver/registry/' /tmp/changed.txt || true)
-          TOUCHED_DTCTL=$(grep -E '^dtctl/' /tmp/changed.txt || true)
+          TOUCHED_CODE=$(grep -cE '(checkout|payment|cart|frontend|shipping|recommendation)/.*\.(py|ts|js|go|java)$' /tmp/changed.txt || true)
+          TOUCHED_REGISTRY=$(grep -cE '^weaver/registry/' /tmp/changed.txt || true)
+          TOUCHED_DTCTL=$(grep -cE '^dtctl/' /tmp/changed.txt || true)
 
+          # Use counts (integers) instead of multi-line filenames to avoid
+          # malformed GITHUB_OUTPUT. The actual file list is in /tmp/changed.txt.
           echo "code=$TOUCHED_CODE"        >> "$GITHUB_OUTPUT"
           echo "registry=$TOUCHED_REGISTRY" >> "$GITHUB_OUTPUT"
           echo "dtctl=$TOUCHED_DTCTL"      >> "$GITHUB_OUTPUT"
@@ -74,7 +76,7 @@ jobs:
 
       - name: Analyze drift
         id: analyze
-        if: steps.scan.outputs.skipped != 'true' && steps.scan.outputs.code != ''
+        if: steps.scan.outputs.skipped != 'true' && steps.scan.outputs.code != '' && steps.scan.outputs.code != '0'
         env:
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
@@ -101,7 +103,9 @@ jobs:
           script: |
             const fs = require('fs');
             const drift = JSON.parse(fs.readFileSync('/tmp/drift.json', 'utf8'));
-            const tmpl = fs.readFileSync('.github/ISSUE_TEMPLATE/observability-drift.md', 'utf8');
+            // Strip YAML front matter (---\n...\n---) used by GitHub's template picker
+            const tmpl = fs.readFileSync('.github/ISSUE_TEMPLATE/observability-drift.md', 'utf8')
+              .replace(/^---\n[\s\S]*?\n---\n/, '');
 
             const rows = drift.drifts.map(d =>
               `| ${d.kind} | \`${d.attribute}\` | ${d.location} | ${d.suggestion} |`

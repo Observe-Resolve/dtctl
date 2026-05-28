@@ -7,10 +7,10 @@ Used in **Demo Part 1 (v1.1.0)** of the script. This is the "feature PR done rig
 ```bash
 # All four installed once, on your machine
 dtctl skills install --agent claude
-claude plugin marketplace add dynatrace/dynatrace-for-ai
-claude plugin install dynatrace@dynatrace-for-ai
+# dynatrace-for-ai skills are loaded via MCP server config in .claude/settings.json
+# (see https://github.com/Dynatrace/dynatrace-for-ai for setup)
 npx skills add henrikrexed/observability-agent-skills
-# (project-local skills/observability-repair/ is loaded automatically by the --skill flag below)
+# (project-local skills/observability-repair/ is referenced in the prompt text below)
 ```
 
 ## Invocation (paste into a fresh shell at the repo root, on a feature branch)
@@ -18,9 +18,7 @@ npx skills add henrikrexed/observability-agent-skills
 ```bash
 git checkout -b feat/cart-size-attribute
 
-claude code \
-  --skill skills/observability-repair \
-  --prompt "$(cat prompts/scenario-1-add-cart-size.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)"
+claude -p "$(cat prompts/scenario-1-add-cart-size.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)"
 ```
 
 ## Expected behavior on camera
@@ -28,7 +26,7 @@ claude code \
 Claude should produce a single commit that touches **three files**, in this order:
 
 1. `weaver/registry/checkout.yaml` — adds `checkout.cart.size` as `experimental` / `recommended`
-2. `demo-app/services/checkout/main.py` — adds `span.set_attribute("checkout.cart.size", len(order.items))` inside `place_order`
+2. `demo-app/services/checkout/main.py` — adds `span.set_attribute("checkout.cart.size", ...)` inside `PlaceOrder` (stub count — `PlaceOrderRequest` doesn't carry items directly)
 3. `dtctl/dashboards/service-health.yaml` — adds a "Cart size distribution" tile filtered on `app.version` + `checkout.cart.size`
 
 Then `weaver registry check` + `weaver registry diff` + `dtctl validate` locally — all green.
@@ -56,11 +54,11 @@ Touch exactly three files in one commit:
    - Add `checkout.cart.size` as a new attribute under the `checkout` group.
    - `type: int`, `requirement_level: recommended`, `stability: experimental`.
    - Add a one-line `brief:` and `examples:`.
-   - Reference it from the `checkout.place_order` span definition.
+   - Reference it from the `oteldemo.CheckoutService.PlaceOrder` span definition.
 
 2. `demo-app/services/checkout/main.py`
-   - Inside `place_order`, after the `span.set_attribute("order.total_usd", …)` line, add:
-     `span.set_attribute("checkout.cart.size", len(order.items))`.
+   - Inside `PlaceOrder`, after the `span.set_attribute("order.total_usd", …)` line, add:
+     `span.set_attribute("checkout.cart.size", ...)` with the item count (note: the demo's `PlaceOrderRequest` proto has no `items` field — use a stub count for demo purposes).
    - Keep the comment block above the existing attributes — that block documents what's required and what's recommended.
 
 3. `dtctl/dashboards/service-health.yaml`
@@ -68,7 +66,7 @@ Touch exactly three files in one commit:
      ```dql
      fetch spans, from:now()-1h
      | filter service.name == "checkout"
-     | filter span.name == "checkout.place_order"
+     | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
      | filter app.version == "${APP_VERSION}"
      | filter isNotNull(checkout.cart.size)
      | summarize dist = histogram(checkout.cart.size), buckets: 10
@@ -87,8 +85,8 @@ Commit message:
 
   feat(checkout): add cart.size attribute + dashboard tile
 
-  - code: span.set_attribute("checkout.cart.size", len(order.items))
-  - registry: new experimental attribute referenced from checkout.place_order
+  - code: span.set_attribute("checkout.cart.size", ...) in PlaceOrder
+  - registry: new experimental attribute referenced from oteldemo.CheckoutService.PlaceOrder
   - dashboard: histogram tile filtered on app.version
 
 Do NOT push. Do NOT build the image. Just propose the commit and stop.

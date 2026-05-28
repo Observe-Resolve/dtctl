@@ -12,9 +12,7 @@ Same four skills as Beat 1 (see `prompts/scenario-1-add-cart-size.md`).
 # Pull the ticket body into a file Claude can see
 gh issue view 42 > /tmp/ticket.md
 
-claude code \
-  --skill skills/observability-repair \
-  --prompt "$(cat prompts/scenario-2-resolve-drift.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)
+claude -p "$(cat prompts/scenario-2-resolve-drift.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)
 TICKET:
 $(cat /tmp/ticket.md)"
 ```
@@ -49,21 +47,24 @@ Before you change anything:
 2. Use the **observability-agent-skills** authoring pack (`otel-instrumentation` + `otel-semantic-conventions`) to make sure the code change is shaped correctly — proper deprecation comments, both attributes emitted during the overlap, no PII leaks.
 3. Read the drift JSON inside the ticket. For each drift, classify it (`renamed`, `added_to_code`, `removed_from_code`, `type_changed`, `stability_changed`). The ticket from the watcher is for a `renamed` drift on `customer.tier` → `customerTier`.
 
-Touch exactly three files in one commit:
+Touch these four files in one commit:
 
 1. `weaver/registry/checkout.yaml`
    - Keep the existing `customer.tier` entry. Add `deprecated: true` and `deprecated_reason: "renamed to customerTier"` to it. Update the `brief:` to mention the deprecation.
    - Add a new attribute entry for `customerTier`. Same `type` as the original. `stability: experimental`. `requirement_level: recommended`.
-   - The `checkout.place_order` span definition must reference both attributes.
+   - The `oteldemo.CheckoutService.PlaceOrder` span definition must reference both attributes.
 
 2. `demo-app/services/checkout/main.py`
    - Keep the line that sets `customer.tier`. Add a comment above it: `# DEPRECATED — keep for one release so v1.1.0 dashboards still resolve. Remove in v1.2.0.`
-   - Add a new line directly below: `span.set_attribute("customerTier", order.customer_tier)` with a comment `# NEW — target name going forward. Mirrors the registry entry.`
+   - Add a new line directly below: `span.set_attribute("customerTier", _infer_customer_tier(request.user_id))` with a comment `# NEW — target name going forward. Mirrors the registry entry.`
 
-3. `dtctl/dashboards/service-health.yaml` AND `dtctl/slos/checkout-by-tier.yaml`
+3. `dtctl/dashboards/service-health.yaml`
    - Find every reference to `customer.tier`. Replace with `coalesce(customerTier, customer.tier)`.
-   - The dashboard tile "Orders by customer tier" and the `checkout-by-tier` SLO both filter on `isNotNull(customer.tier)` — without coalesce they go blank the moment the rename lands.
-   - This keeps the tile and the SLO measuring during the one-release overlap window.
+   - The dashboard tile "Orders by customer tier" filters on `isNotNull(customer.tier)` — without coalesce it goes blank the moment the rename lands.
+
+4. `dtctl/slos/checkout-by-tier.yaml`
+   - Same coalesce treatment: replace `customer.tier` references with `coalesce(customerTier, customer.tier)`.
+   - This keeps the SLO measuring during the one-release overlap window.
 
 Before committing, run locally:
 

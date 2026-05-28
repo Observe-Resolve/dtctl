@@ -44,13 +44,6 @@ groups:
         brief: "Payment method used for the order."
         examples: ["credit_card"]
 
-      - id: checkout.cart.size
-        type: int
-        requirement_level: recommended
-        stability: experimental
-        brief: "Number of distinct line items in the cart at checkout."
-        examples: [1, 5]
-
       - id: checkout.order.total_usd
         type: double
         requirement_level: recommended
@@ -68,5 +61,4 @@ groups:
     attributes:
       - ref: checkout.customer.tier
       - ref: checkout.payment.method
-      - ref: checkout.cart.size
       - ref: checkout.order.total_usd

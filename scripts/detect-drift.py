@@ -123,7 +123,7 @@ def main() -> int:
             "suggestion": (
                 f"Keep `{old}` in the registry marked `deprecated: true` with a one-release overlap. "
                 f"Add `{new}` with `stability: experimental`. Emit both from the code for one release. "
-                f"Update dtctl queries to `coalesce({old}, {new})`."
+                f"Update dtctl queries to `coalesce({new}, {old})`."
             ),
         })
 

@@ -33,9 +33,7 @@ Run this from the repo root:
 
 ```bash
 gh issue view <this-issue-number> > /tmp/ticket.md
-claude code \
-  --skill skills/observability-repair \
-  --prompt "$(cat prompts/scenario-2-resolve-drift.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)
+claude -p "$(cat prompts/scenario-2-resolve-drift.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)
 TICKET:
 $(cat /tmp/ticket.md)"
 ```
