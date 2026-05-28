@@ -10,7 +10,8 @@
       "Bash(envsubst *)",
       "Bash(cat *)",
       "Bash(ls *)",
-      "Bash(diff *)"
+      "Bash(diff *)",
+      "Bash(git commit:*)"
     ]
   }
 }
