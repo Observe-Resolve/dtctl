@@ -85,7 +85,7 @@ tile_entry = '''    "10":
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
         | filter app.version == "${APP_VERSION}"
         | filter isNotNull(checkout.cart.size)
-        | summarize dist = histogram(checkout.cart.size), buckets: 10
+        | summarize count(), by: bins(checkout.cart.size, 10)
       querySettings:
         defaultSamplingRatio: 10
         defaultScanLimitGbytes: 500

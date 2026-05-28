@@ -70,7 +70,7 @@ Touch exactly three files in one commit:
      | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
      | filter app.version == "${APP_VERSION}"
      | filter isNotNull(checkout.cart.size)
-     | summarize dist = histogram(checkout.cart.size), buckets: 10
+     | summarize count(), by: bins(checkout.cart.size, 10)
      ```
    - Insert the tile beside the existing "Checkout error rate (5m)" tile, same row, half-width each.
 
