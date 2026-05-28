@@ -51,6 +51,13 @@ groups:
         brief: "Order total in USD (pre-tax)."
         examples: [129.99]
 
+      - id: checkout.cart.size
+        type: int
+        requirement_level: recommended
+        stability: experimental
+        brief: "Number of items in the shopping cart at checkout."
+        examples: [3, 7, 1]
+
   # ── Span definitions ─────────────────────────────────────────────────────
   # Span name follows the gRPC convention: package.Service/Method
   - id: oteldemo.CheckoutService.PlaceOrder
@@ -62,3 +69,4 @@ groups:
       - ref: checkout.customer.tier
       - ref: checkout.payment.method
       - ref: checkout.order.total_usd
+      - ref: checkout.cart.size

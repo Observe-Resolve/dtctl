@@ -45,8 +45,13 @@ content:
       "y": 13
     "7":
       h: 5
-      w: 12
+      w: 6
       x: 12
+      "y": 13
+    "10":
+      h: 5
+      w: 6
+      x: 18
       "y": 13
     "8":
       h: 6
@@ -272,6 +277,29 @@ content:
         maxResultMegaBytes: 1
         maxResultRecords: 1000
       title: Orders by customer tier (1h)
+      type: data
+      visualization: categoricalBarChart
+      visualizationSettings:
+        autoSelectVisualization: false
+    "10":
+      davis:
+        davisVisualization:
+          isAvailable: true
+        enabled: false
+      query: |
+        fetch spans, from:now()-1h
+        | filter service.name == "checkout"
+        | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
+        | filter app.version == "${APP_VERSION}"
+        | filter isNotNull(checkout.cart.size)
+        | summarize count(), by: bins(checkout.cart.size, 10)
+      querySettings:
+        defaultSamplingRatio: 10
+        defaultScanLimitGbytes: 500
+        enableSampling: false
+        maxResultMegaBytes: 1
+        maxResultRecords: 1000
+      title: Cart size distribution
       type: data
       visualization: categoricalBarChart
       visualizationSettings:
