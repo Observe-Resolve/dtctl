@@ -1,12 +1,12 @@
 # Beat 3 — Stage the deliberate regression
 
-Used in **Demo Part 3 (v1.1.2)** of the script. The Guardian is the on-camera hero of Beat 3 — Argo Rollouts is the on-camera mechanic. Claude is *off* camera here; this prompt exists so you can let Claude stage the regression for you between takes (instead of running `patches/inject-600ms-regression.sh` by hand).
+Used in **Demo Part 3 (v1.1.3)** of the script. The Guardian is the on-camera hero of Beat 3 — Argo Rollouts is the on-camera mechanic. Claude is *off* camera here; this prompt exists so you can let Claude stage the regression for you between takes (instead of running `patches/inject-600ms-regression.sh` by hand).
 
 If you'd rather the regression land via the patch script, skip this prompt and just run:
 
 ```bash
 ./demo-app/services/checkout/patches/inject-600ms-regression.sh
-git add -A && git commit -m "chore(demo): stage v1.1.2 regression for SRG demo"
+git add -A && git commit -m "chore(demo): stage v1.1.3 regression for SRG demo"
 ```
 
 The patch script and this prompt produce **byte-identical** changes — that's intentional, so the rehearsal stays consistent.
@@ -18,7 +18,7 @@ Same four skills as Beat 1. The `observability-agent-skills` pack is the most im
 ## Invocation
 
 ```bash
-git checkout -b release/v1.1.2
+git checkout -b release/v1.1.3
 
 claude -p "$(cat prompts/scenario-3-stage-regression.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)" \
   --allowedTools Edit Write Bash

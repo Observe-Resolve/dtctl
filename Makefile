@@ -38,7 +38,7 @@ scenario-2:  ## RED: rename customer.tier → Weaver fails → repair suggestion
 	./scripts/scenario-2-weaver-save.sh
 
 .PHONY: scenario-3
-scenario-3:  ## GUARDIAN: v1.1.2 regression → SRG fails → auto-rollback
+scenario-3:  ## GUARDIAN: v1.1.3 regression → SRG fails → auto-rollback
 	./scripts/scenario-3-srg-gate.sh
 
 .PHONY: rollback
