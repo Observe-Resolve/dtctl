@@ -47,9 +47,9 @@ analysis:
 canary:
   steps:
     - setWeight: 10
-    - pauseSec: 300
+    - pauseSec: 600
     - analysisAt: 10
     - setWeight: 50
-    - pauseSec: 300
+    - pauseSec: 600
     - analysisAt: 50
     - setWeight: 100
