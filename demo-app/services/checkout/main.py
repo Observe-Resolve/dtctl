@@ -82,7 +82,7 @@ class CheckoutServicer(demo_pb2_grpc.CheckoutServiceServicer):
             # ─── Required attributes per weaver/registry/checkout.yaml ───
             # Renaming any of these without a registry update WILL trip the
             # observability-watch GitHub Action and file a drift issue.
-            span.set_attribute("customer.tier", _infer_customer_tier(request.user_id))
+            span.set_attribute("customerTier", _infer_customer_tier(request.user_id))
             span.set_attribute("payment.method", _infer_payment_method(request.credit_card))
             span.set_attribute("order.total_usd", _calculate_total(request))
 

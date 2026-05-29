@@ -14,7 +14,7 @@ BR="refactor/camelcase-attrs"
 log() { printf '\033[1;33m[scenario-2]\033[0m %s\n' "$*"; }
 
 log "creating branch $BR"
-git checkout -b "$BR" main
+git checkout -b "$BR" master
 
 log "apply the naïve rename (no registry/dtctl updates on purpose)"
 ./demo-app/services/checkout/patches/rename-customer-tier.sh

@@ -22,7 +22,7 @@ gh pr checks "$PR_URL" --watch
 gh pr merge "$PR_URL" --squash --delete-branch
 
 log "tagging $TAG"
-git checkout main && git pull
+git checkout master && git pull
 git tag "$TAG"
 git push --tags
 
