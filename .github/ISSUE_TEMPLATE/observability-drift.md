@@ -17,6 +17,10 @@ labels: ["observability-drift", "needs-agent"]
 |---|---|---|---|
 {{DRIFTS}}
 
+## Impacted files
+
+{{IMPACTED_FILES}}
+
 <details>
 <summary>Raw drift report (JSON)</summary>
 
@@ -27,20 +31,24 @@ labels: ["observability-drift", "needs-agent"]
 
 ---
 
+## Copilot analysis
+
+{{COPILOT_PROMPT}}
+
 ## Claude Code — one-click resolver
 
 Run this from the repo root:
 
 ```bash
-gh issue view <this-issue-number> > /tmp/ticket.md
-claude -p "$(cat prompts/scenario-2-resolve-drift.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)
+gh issue view <this-issue-number> --comments > /tmp/ticket.md
+claude -p "$(cat prompts/resolve-drift.md)
 TICKET:
 $(cat /tmp/ticket.md)"
 ```
 
 Claude will:
 
-1. Read this ticket and the drift JSON.
+1. Read this ticket **and the comments** (including Copilot's analysis).
 2. Read the current code, registry, and dtctl manifests.
 3. Apply the **observability-repair** skill's rules:
    - Deprecate renamed attributes with a one-release overlap.

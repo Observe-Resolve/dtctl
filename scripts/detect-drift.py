@@ -82,6 +82,21 @@ def naive_rename(removed: set[str], added: set[str]) -> list[tuple[str, str]]:
     return pairs
 
 
+def scan_for_attribute(base_dir: pathlib.Path, attr_name: str) -> list[dict]:
+    """Grep YAML files under *base_dir* for *attr_name*, return hits with context."""
+    hits: list[dict] = []
+    for yaml in base_dir.rglob("*.yaml"):
+        lines = yaml.read_text().splitlines()
+        for i, line in enumerate(lines):
+            if attr_name in line:
+                hits.append({
+                    "file": str(yaml),
+                    "line": i + 1,
+                    "context": line.strip(),
+                })
+    return hits
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-ref", required=True)
@@ -89,6 +104,8 @@ def main() -> int:
     ap.add_argument("--changed-files", required=True)
     ap.add_argument("--registry", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument("--dtctl-dir", default=None,
+                    help="Path to dtctl/ directory; when set, drift entries include impacted_files")
     args = ap.parse_args()
 
     changed = pathlib.Path(args.changed_files).read_text().strip().splitlines()
@@ -114,9 +131,12 @@ def main() -> int:
 
     drifts: list[dict] = []
 
+    registry_dir = pathlib.Path(args.registry)
+    dtctl_dir = pathlib.Path(args.dtctl_dir) if args.dtctl_dir else None
+
     # 1. Rename suspects (cross reference removed ↔ added)
     for old, new in naive_rename(removed, added):
-        drifts.append({
+        entry: dict = {
             "kind": "renamed",
             "attribute": f"{old} → {new}",
             "location": ", ".join(sorted(f for f, s in per_file.items() if old in s or new in s)),
@@ -125,11 +145,18 @@ def main() -> int:
                 f"Add `{new}` with `stability: experimental`. Emit both from the code for one release. "
                 f"Update dtctl queries to `coalesce({new}, {old})`."
             ),
-        })
+        }
+        if dtctl_dir:
+            entry["impacted_files"] = {
+                "code": sorted(f for f, s in per_file.items() if old in s or new in s),
+                "registry": scan_for_attribute(registry_dir, old) + scan_for_attribute(registry_dir, new),
+                "dtctl": scan_for_attribute(dtctl_dir, old) + scan_for_attribute(dtctl_dir, new),
+            }
+        drifts.append(entry)
 
     # 2. Added-to-code but not in registry
     for a in added - registry - {new for _, new in naive_rename(removed, added)}:
-        drifts.append({
+        entry = {
             "kind": "added_to_code",
             "attribute": a,
             "location": ", ".join(sorted(f for f, s in per_file.items() if a in s)),
@@ -137,12 +164,19 @@ def main() -> int:
                 f"Declare `{a}` in `weaver/registry/` with `stability: experimental` and a `brief`. "
                 f"Run `weaver registry check` before pushing."
             ),
-        })
+        }
+        if dtctl_dir:
+            entry["impacted_files"] = {
+                "code": sorted(f for f, s in per_file.items() if a in s),
+                "registry": scan_for_attribute(registry_dir, a),
+                "dtctl": scan_for_attribute(dtctl_dir, a),
+            }
+        drifts.append(entry)
 
     # 3. Removed-from-code but still in registry (and not a rename)
     pure_removed = removed - {old for old, _ in naive_rename(removed, added)}
     for a in pure_removed & registry:
-        drifts.append({
+        entry = {
             "kind": "removed_from_code",
             "attribute": a,
             "location": ", ".join(sorted(f for f, s in per_file.items() if a in s)),
@@ -150,7 +184,14 @@ def main() -> int:
                 f"Mark `{a}` `deprecated: true` in the registry for one release, then remove. "
                 f"Do NOT remove it from the registry in this PR."
             ),
-        })
+        }
+        if dtctl_dir:
+            entry["impacted_files"] = {
+                "code": sorted(f for f, s in per_file.items() if a in s),
+                "registry": scan_for_attribute(registry_dir, a),
+                "dtctl": scan_for_attribute(dtctl_dir, a),
+            }
+        drifts.append(entry)
 
     out = {"drifts": drifts}
     pathlib.Path(args.output).write_text(json.dumps(out, indent=2))

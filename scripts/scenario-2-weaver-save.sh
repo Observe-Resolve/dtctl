@@ -35,11 +35,14 @@ log "drift issue filed: #$ISSUE_NUM"
 gh issue view "$ISSUE_NUM"
 
 log "handing off to Claude Code"
-gh issue view "$ISSUE_NUM" > /tmp/ticket.md
+gh issue view "$ISSUE_NUM" --comments > /tmp/ticket.md
+
+DRIFT_PROMPT="${DRIFT_PROMPT:-prompts/resolve-drift.md}"
+log "using prompt: $DRIFT_PROMPT"
 
 claude code \
   --skill skills/observability-repair \
-  --prompt "$(cat prompts/scenario-2-resolve-drift.md | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)
+  --prompt "$(cat "$DRIFT_PROMPT" | sed -n '/^---PROMPT BELOW---$/,$ p' | tail -n +2)
 TICKET:
 $(cat /tmp/ticket.md)"
 

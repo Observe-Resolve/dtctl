@@ -87,6 +87,7 @@ jobs:
             --head-ref HEAD \
             --changed-files /tmp/changed.txt \
             --registry weaver/registry \
+            --dtctl-dir dtctl \
             --output /tmp/drift.json
 
           if [[ -s /tmp/drift.json ]] && [[ "$(jq '.drifts | length' /tmp/drift.json)" -gt 0 ]]; then
@@ -111,11 +112,45 @@ jobs:
               `| ${d.kind} | \`${d.attribute}\` | ${d.location} | ${d.suggestion} |`
             ).join('\n');
 
+            // Render impacted files grouped by category
+            let impactedFiles = '';
+            for (const d of drift.drifts) {
+              if (!d.impacted_files) continue;
+              impactedFiles += `### \`${d.attribute}\`\n\n`;
+              for (const [category, files] of Object.entries(d.impacted_files)) {
+                if (!files || files.length === 0) continue;
+                impactedFiles += `**${category}:**\n`;
+                if (Array.isArray(files) && typeof files[0] === 'string') {
+                  // code files are plain strings
+                  for (const f of files) {
+                    impactedFiles += `- \`${f}\`\n`;
+                  }
+                } else {
+                  // registry/dtctl hits have file, line, context
+                  for (const hit of files) {
+                    impactedFiles += `- \`${hit.file}:${hit.line}\` — \`${hit.context}\`\n`;
+                  }
+                }
+                impactedFiles += '\n';
+              }
+            }
+            if (!impactedFiles) {
+              impactedFiles = '_No impacted file details available (run detect-drift.py with `--dtctl-dir` to enable)._';
+            }
+
+            // Copilot analysis prompt rendered into the issue body
+            const copilotPrompt = [
+              'The `@github-copilot` bot has been asked to analyze this drift in the comments below.',
+              'If Copilot has replied, its per-file recommendations are available for the resolver agent.',
+            ].join(' ');
+
             const body = tmpl
-              .replace('{{BRANCH}}',  context.ref.replace('refs/heads/',''))
-              .replace('{{COMMIT}}',  context.sha.slice(0,7))
-              .replace('{{DRIFTS}}',  rows)
-              .replace('{{JSON}}',    JSON.stringify(drift, null, 2));
+              .replace('{{BRANCH}}',         context.ref.replace('refs/heads/',''))
+              .replace('{{COMMIT}}',         context.sha.slice(0,7))
+              .replace('{{DRIFTS}}',         rows)
+              .replace('{{IMPACTED_FILES}}', impactedFiles)
+              .replace('{{COPILOT_PROMPT}}', copilotPrompt)
+              .replace('{{JSON}}',           JSON.stringify(drift, null, 2));
 
             const title = `Observability drift on \`${context.ref.replace('refs/heads/','')}\` (${drift.drifts.length} issues)`;
 
@@ -127,3 +162,27 @@ jobs:
               labels: ['observability-drift', 'needs-agent']
             });
             console.log(`Filed issue #${issue.number}`);
+
+            // Ask Copilot to analyze the drift in a follow-up comment
+            const attrList = drift.drifts.map(d => `- **${d.kind}**: \`${d.attribute}\``).join('\n');
+            const copilotComment = [
+              `@github-copilot Please analyze this observability drift and recommend fixes.\n`,
+              `## Drifts detected\n`,
+              attrList,
+              `\n## What to analyze\n`,
+              `For each impacted file listed in the issue body, describe the specific change needed.`,
+              `\n**Policy summary:**`,
+              `- Never remove a stable attribute in one shot — emit both old and new for one release cycle.`,
+              `- Use \`coalesce(new, old)\` in DQL queries during the overlap window.`,
+              `- New attributes start as \`stability: experimental\`.`,
+              `- Registry, code, and dtctl manifests must all update in the same commit.`,
+              `\nSee \`skills/observability-repair/SKILL.md\` for the full policy.`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: issue.number,
+              body: copilotComment,
+            });
+            console.log(`Posted Copilot analysis request on issue #${issue.number}`);

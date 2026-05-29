@@ -1,5 +1,7 @@
 # Beat 2 — Resolve a drift ticket Copilot just filed
 
+> **Note:** This is the **demo-specific** version of the resolver prompt, hardcoded to the `customer.tier` -> `customerTier` scenario. For the **generic** version that works with any drift ticket, see [`prompts/resolve-drift.md`](./resolve-drift.md).
+
 Used in **Demo Part 2 (v1.1.1)** of the script. Pre-condition: a teammate has pushed a code-only rename of `customer.tier` → `customerTier`, the `observability-watch` workflow has filed GitHub Issue **#42** with label `observability-drift`. We're handing the ticket to Claude.
 
 ## Skills loaded before you paste
