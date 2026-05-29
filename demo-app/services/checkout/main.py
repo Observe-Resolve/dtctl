@@ -132,6 +132,8 @@ def _charge(request) -> str:
         span.set_attribute("payment.provider", "stripe")
         span.set_attribute("payment.amount_usd", _calculate_total(request))
 
+        time.sleep(0.6)  # DEMO REGRESSION (Beat 3) — Guardian should catch this
+
         # Beat 3's inject-600ms-regression patch inserts a deliberate sleep here
         # to trip frontend-p95-latency + error-budget-burn objectives in the SRG.
 
