@@ -6,13 +6,14 @@ type: slo
 id: "vu9U3hXa3q0AAAABAClidWlsdGluOmludGVybmFsLnNlcnZpY2UubGV2ZWwub2JqZWN0aXZlcwAGdGVuYW50AAZ0ZW5hbnQAJDZhOWZhZDBhLTExYzMtMzY4OS1hMzYyLTRkYzYzMGE0OTcwNL7vVN4V2t6t"
 name: "checkout-by-tier"
 enabled: true
-customDescription: "Checkout PlaceOrder success rate for orders with customer.tier set."
+customDescription: "Checkout PlaceOrder success rate for orders with customer tier set (coalesces customerTier and customer.tier during migration)."
 customSli:
   indicator: |
     fetch spans
     | filter service.name == "checkout"
     | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
-    | filter isNotNull(customer.tier)
+    | fieldsAdd tier = coalesce(customerTier, customer.tier)
+    | filter isNotNull(tier)
     | summarize total = count(), good = countIf(span.status_code == "error")
     | fieldsAdd sli = ((toDouble(total) - toDouble(good)) / toDouble(total)) * 100
 criteria:

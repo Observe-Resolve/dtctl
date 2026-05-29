@@ -21,9 +21,28 @@ groups:
             - id: enterprise
               value: "enterprise"
               stability: stable
-        requirement_level: required
+        requirement_level: recommended
         stability: stable
+        deprecated: "Renamed to checkout.customerTier. Emit both for one release cycle, then remove."
         brief: "Customer subscription tier for the order."
+        examples: ["enterprise"]
+
+      - id: checkout.customerTier
+        type:
+          allow_custom_values: false
+          members:
+            - id: free
+              value: "free"
+              stability: experimental
+            - id: plus
+              value: "plus"
+              stability: experimental
+            - id: enterprise
+              value: "enterprise"
+              stability: experimental
+        requirement_level: required
+        stability: experimental
+        brief: "Customer subscription tier for the order (camelCase replacement for checkout.customer.tier)."
         examples: ["enterprise"]
 
       - id: checkout.payment.method
@@ -67,6 +86,7 @@ groups:
     brief: "Span emitted when the checkout service places an order via gRPC."
     attributes:
       - ref: checkout.customer.tier
+      - ref: checkout.customerTier
       - ref: checkout.payment.method
       - ref: checkout.order.total_usd
       - ref: checkout.cart.size
