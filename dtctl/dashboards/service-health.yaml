@@ -267,8 +267,9 @@ content:
         fetch spans, from:now()-1h
         | filter service.name == "checkout"
         | filter span.name == "oteldemo.CheckoutService/PlaceOrder"
-        | filter isNotNull(customer.tier)
-        | summarize orders = count(), by:{customer.tier}
+        | fieldsAdd tier = coalesce(customerTier, customer.tier)
+        | filter isNotNull(tier)
+        | summarize orders = count(), by:{tier}
         | sort orders desc
       querySettings:
         defaultSamplingRatio: 10
