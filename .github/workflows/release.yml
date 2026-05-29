@@ -184,6 +184,7 @@ jobs:
 
       - name: Commit + push
         run: |
+          set -eo pipefail
           git config user.name  "observe-resolve-bot"
           git config user.email "bot@observe-resolve.dev"
           git add deploy/helm/values.yaml
@@ -191,7 +192,7 @@ jobs:
             echo "No changes to values.yaml - already at ${APP_VERSION}"
           else
             git commit -m "release(${APP_VERSION}): bump checkout image tag"
-            git push
+            git push origin master
           fi
 
       - name: Summary
