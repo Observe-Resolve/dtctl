@@ -34,7 +34,7 @@ import demo_pb2_grpc
 from main import CheckoutServicer  # noqa: E402 — must come after tracer setup
 
 REQUIRED_ATTRS = {
-    "customer.tier",
+    "customerTier",
     "payment.method",
     "order.total_usd",
     "checkout.outcome",
