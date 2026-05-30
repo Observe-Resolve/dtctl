@@ -8,7 +8,7 @@ This tutorial will utilize:
 * OpenTelemetry Operator with the OpenTelemetry Demo application + a single OTel Collector gateway forwarding traces, metrics and logs to Dynatrace
 * The Dynatrace Operator (Kubernetes monitoring mode — no OneAgent injection) to populate Smartscape entities for our cluster
 * OpenTelemetry **Weaver** to manage the telemetry semantic conventions as code, validated in CI on every pull request
-* **dtctl** — the Dynatrace CLI — to apply dashboards, SLOs, workflows, and Site Reliability Guardians as YAML
+* **dtctl** — the Dynatrace CLI — to apply dashboards, SLOs, and Site Reliability Guardians as YAML
 * **Argo CD** + **Argo Rollouts** to drive a canary rollout of the checkout service on every git tag
 * **Site Reliability Guardian** evaluating SLO objectives during the canary, gating promotion or aborting the release
 * **Claude Code** with the `henrikrexed/observability-agent-skills` pack for the on-camera code changes
@@ -26,14 +26,13 @@ graph TD
     subgraph Dynatrace
         Dashboard["Dashboard"]
         SLOs["SLOs (3)"]
-        Workflow["Workflow<br/>(checkout-release-validation)"]
         Guardian["Site Reliability<br/>Guardian"]
     end
 
     subgraph Kubernetes [Kubernetes — otel-demo namespace]
         ArgoCD["Argo CD"]
         Rollouts["Argo Rollouts<br/>canary 10% → 50% → 100%"]
-        Analysis["AnalysisTemplate<br/>(sends SDLC event + polls verdict)"]
+        Analysis["AnalysisTemplate<br/>(dtctl validate-guardian-action)"]
         Notifications["Argo Notifications<br/>(GitHub issue on abort)"]
         OtelDemo["otel-demo<br/>services"]
         Collector["OTel Collector"]
@@ -42,15 +41,12 @@ graph TD
     Repo -- "git tag v*" --> CI
     CI -- "1. Build + push<br/>Docker image" --> GHCR["ghcr.io"]
     CI -- "2. dtctl apply<br/>dashboards, SLOs,<br/>guardian" --> Dynatrace
-    CI -- "3. dtctl create workflow" --> Workflow
-    CI -- "4. Bump values.yaml<br/>+ git push" --> Repo
+    CI -- "3. Bump values.yaml<br/>+ git push" --> Repo
 
     Repo -- "watches master" --> ArgoCD
     ArgoCD -- "syncs Helm chart" --> Rollouts
     Rollouts --> Analysis
-    Analysis -- "SDLC event<br/>(event token)" --> Workflow
-    Workflow -- "triggers evaluation" --> Guardian
-    Analysis -- "dtctl get wfe<br/>(platform token)" --> Guardian
+    Analysis -- "dtctl validate-guardian-action<br/>(platform token)" --> Guardian
     Guardian -- "pass → promote" --> Rollouts
     Guardian -- "fail → abort" --> Rollouts
     Rollouts -- "on-rollout-aborted" --> Notifications
@@ -64,15 +60,12 @@ graph TD
 1. Developer pushes a `v*.*.*` tag to GitHub
 2. CI builds the checkout Docker image and pushes it to `ghcr.io`
 3. CI runs `dtctl apply` to upsert dashboards, SLOs, and the guardian in Dynatrace
-4. CI runs `dtctl create workflow` to upsert the guardian-validation workflow
-5. CI bumps `deploy/helm/values.yaml` with the new image tag and pushes to master
-6. Argo CD detects the values change and syncs the Helm chart to Kubernetes
-7. Argo Rollouts starts a canary deployment (10% → 50% → 100%)
-8. At each analysis gate, the AnalysisTemplate sends an SDLC event to Dynatrace (using the event token via curl)
-9. The `checkout-release-validation` workflow catches the event and triggers the Guardian evaluation
-10. The AnalysisTemplate polls `dtctl get wfe` for the workflow execution verdict (using the platform token)
-11. Guardian evaluates 3 objectives (availability, p95 latency, latency burn rate) — **pass** promotes, **fail** aborts
-12. On abort, Argo Rollouts Notifications auto-creates a GitHub issue for investigation
+4. CI bumps `deploy/helm/values.yaml` with the new image tag and pushes to master
+5. Argo CD detects the values change and syncs the Helm chart to Kubernetes
+6. Argo Rollouts starts a canary deployment (10% → 50% → 100%)
+7. At each analysis gate, the AnalysisTemplate calls `dtctl validate-guardian-action` synchronously against the Guardian
+8. Guardian evaluates 3 objectives (availability, p95 latency, latency burn rate) — **pass** promotes, **fail** aborts
+9. On abort, Argo Rollouts Notifications auto-creates a GitHub issue for investigation
 
 ## Prerequisite
 The following tools need to be install on your machine :
@@ -280,6 +273,28 @@ make scenario-3   # GUARDIAN: regression staged → SRG verdicts fail → Argo a
 ```
 
 `scenario-1` is the dress rehearsal — run it once before recording to make sure the cluster is happy.
+
+### Scenario 3 prerequisite: service mesh with GRPCRoute traffic splitting
+
+Scenario 3 requires a **service mesh** (e.g. Istio, Linkerd) or **Gateway API** with `GRPCRoute` support for the canary to work correctly.
+
+The checkout service uses gRPC (HTTP/2), and gRPC multiplexes all requests over a single long-lived TCP connection. Without L7 load balancing, kube-proxy only balances at connection establishment time — meaning canary pods never receive traffic because the frontend reuses its existing connection to the stable pods. The Site Reliability Guardian then evaluates zero spans for the new version and vacuously passes all objectives.
+
+To run scenario 3, configure a `TrafficSplit` policy with a `GRPCRoute` between the frontend and checkout service. Argo Rollouts supports this natively:
+
+```yaml
+strategy:
+  canary:
+    trafficRouting:
+      plugins:
+        argoproj-labs/gatewayAPI:
+          grpcRoute: checkout-grpc-route
+          namespace: otel-demo
+    canaryService: checkout-canary
+    stableService: checkout-stable
+```
+
+With this configuration, `setWeight: 10` splits 10% of individual gRPC requests to the canary (not 10% of pods), ensuring the Guardian evaluates real canary traffic and catches regressions like the 600ms latency injection in `_charge()`.
 
 ## Use Claude Code for the code changes (on camera)
 
