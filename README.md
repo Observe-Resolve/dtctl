@@ -1,7 +1,7 @@
 # Observe & Resolve
 <p align="center"><img src="/image/logo.png" width="40%" alt="Observe & Resolve logo" /></p>
 
-## Episode : Dashboards Are Part of Your API
+## Episode 9: Ship Observability as Code with dtctl
 This repository contains the files utilized during the tutorial presented in the dedicated Observe&Resolve episode showing how to ship Dynatrace observability with your application — semantic conventions in Weaver, dashboards / SLOs / Guardians as YAML applied by `dtctl`, GitOps rollouts via Argo CD + Argo Rollouts, and a Site Reliability Guardian gating every release.
 
 This tutorial will utilize:
